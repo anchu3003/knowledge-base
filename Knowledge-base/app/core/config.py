@@ -1,7 +1,8 @@
-from pydantic_settings import BaseSettings
-from pydantic import Field
 from typing import List, Optional
-from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
     """Application settings"""
@@ -64,7 +65,7 @@ def get_settings() -> Settings:
     """Get application settings (singleton pattern)"""
     global _settings
     if _settings is None:
-        _settings = Settings()
+        _settings = Settings(openai_api_key="sk-sCzJe4vBXrMhCZN7GuM45g")
     return _settings
 
 

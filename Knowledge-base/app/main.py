@@ -1,12 +1,12 @@
-import warnings
 import logging
-from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 # Suppress ChromaDB telemetry warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*telemetry.*")
@@ -108,11 +108,13 @@ origins = [
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,           # List of allowed origins
-    allow_credentials=True,          # Allow cookies, authorization headers
-    allow_methods=["*"],             # Allow all HTTP methods
-    allow_headers=["*"],             # Allow all HTTP headers
+    allow_origins=origins,  # List of allowed origins
+    allow_credentials=True,  # Allow cookies, authorization headers
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all HTTP headers
 )
+
+
 # Dependency injection for FastAPI
 def get_document_service() -> DocumentService:
     """Dependency to get document service"""
@@ -156,7 +158,7 @@ async def health_check():
 
 @app.post("/documents/refresh", response_model=DocumentUploadResponse)
 async def refresh_documents(
-    service: DocumentService = Depends(get_document_service)
+        service: DocumentService = Depends(get_document_service)
 ):
     """
     Refresh documents by re-loading from the default documents folder.
@@ -183,9 +185,10 @@ async def refresh_documents(
             detail=f"Error refreshing documents: {str(e)}"
         )
 
+
 @app.get("/documents/folder-info")
 async def get_documents_folder_info(
-    service: DocumentService = Depends(get_document_service)
+        service: DocumentService = Depends(get_document_service)
 ):
     """Get information about the documents folder"""
     try:
@@ -235,10 +238,11 @@ async def get_documents_folder_info(
             detail=f"Failed to get folder info: {str(e)}"
         )
 
+
 @app.post("/documents/upload", response_model=DocumentUploadResponse)
 async def upload_documents(
-    request: DocumentUploadRequest,
-    service: DocumentService = Depends(get_document_service)
+        request: DocumentUploadRequest,
+        service: DocumentService = Depends(get_document_service)
 ):
     """Upload and process documents from a specified folder"""
     try:
@@ -270,8 +274,8 @@ async def upload_documents(
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(
-    request: ChatRequest,
-    chat_service: ChatService = Depends(get_chat_service)
+        request: ChatRequest,
+        chat_service: ChatService = Depends(get_chat_service)
 ):
     """
     Chat with the RAG system about the uploaded documents.
@@ -301,7 +305,7 @@ async def chat(
 
 @app.get("/documents/status")
 async def get_document_status(
-    service: DocumentService = Depends(get_document_service)
+        service: DocumentService = Depends(get_document_service)
 ):
     """Get the status of the document database"""
     try:
@@ -316,7 +320,7 @@ async def get_document_status(
 
 @app.delete("/documents/clear")
 async def clear_documents(
-    service: DocumentService = Depends(get_document_service)
+        service: DocumentService = Depends(get_document_service)
 ):
     """Clear all documents from the vector database"""
     try:
@@ -328,6 +332,7 @@ async def clear_documents(
             detail=f"Failed to clear database: {str(e)}"
         )
 
+
 if __name__ == "__main__":
     import uvicorn
 
@@ -335,5 +340,4 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8000, reload=True,
-        debug=settings.debug)
+        port=8000, reload=True)

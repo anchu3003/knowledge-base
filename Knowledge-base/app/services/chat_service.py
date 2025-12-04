@@ -1,39 +1,22 @@
-import uuid
 import logging
-from typing import Dict, Any, List, Optional
+import os
+import uuid
 from datetime import datetime
+from typing import Dict, Any, List, Optional
 
-try:
-    from langchain_openai import AzureChatOpenAI, ChatOpenAI
-except ImportError:
-    from langchain_openai import ChatOpenAI
-    AzureChatOpenAI = None
-from langchain.schema import SystemMessage, HumanMessage, AIMessage
-
-# Import OpenAI exceptions (v1.x structure)
-try:
-    from openai import APIError, APIConnectionError, AuthenticationError, RateLimitError
-except ImportError:
-    # Fallback for different OpenAI SDK versions
-    try:
-        from openai.error import APIError, APIConnectionError, AuthenticationError, RateLimitError
-    except ImportError:
-        # If exceptions not available, define base classes
-        APIError = Exception
-        APIConnectionError = ConnectionError
-        AuthenticationError = ValueError
-        RateLimitError = Exception
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from openai import APIError, APIConnectionError, AuthenticationError, RateLimitError
 
 from app.core.config import Settings
 from app.services.document_service import DocumentService
 
-import os
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 os.environ["LANGCHAIN_TELEMETRY"] = "false"
 os.environ["LANGCHAIN_ENDPOINT"] = ""
 
-
 logger = logging.getLogger(__name__)
+
 
 class ChatService:
     """Service for handling chat interactions with RAG."""
@@ -46,7 +29,8 @@ class ChatService:
         if settings.openai_base_url and settings.openai_api_type.lower() == "azure":
             # Use AzureChatOpenAI if available, otherwise use ChatOpenAI with model_kwargs
             if AzureChatOpenAI is not None:
-                logger.info(f"Initializing AzureChatOpenAI with endpoint: {settings.openai_base_url}, deployment: {settings.openai_model}")
+                logger.info(
+                    f"Initializing AzureChatOpenAI with endpoint: {settings.openai_base_url}, deployment: {settings.openai_model}")
                 try:
                     self.llm = AzureChatOpenAI(
                         azure_deployment=settings.openai_model,
@@ -59,10 +43,12 @@ class ChatService:
                     logger.info("AzureChatOpenAI initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize AzureChatOpenAI: {str(e)}")
-                    raise ValueError(f"Failed to initialize AzureChatOpenAI: {str(e)}. Please check your Azure configuration.")
+                    raise ValueError(
+                        f"Failed to initialize AzureChatOpenAI: {str(e)}. Please check your Azure configuration.")
             else:
                 # Fallback to ChatOpenAI with model_kwargs for Azure
-                logger.info(f"Using ChatOpenAI for Azure with endpoint: {settings.openai_base_url}, deployment: {settings.openai_model}")
+                logger.info(
+                    f"Using ChatOpenAI for Azure with endpoint: {settings.openai_base_url}, deployment: {settings.openai_model}")
                 try:
                     self.llm = ChatOpenAI(
                         openai_api_key=settings.openai_api_key,
@@ -77,7 +63,8 @@ class ChatService:
                     logger.info("ChatOpenAI (Azure) initialized successfully")
                 except Exception as e:
                     logger.error(f"Failed to initialize ChatOpenAI for Azure: {str(e)}")
-                    raise ValueError(f"Failed to initialize ChatOpenAI for Azure: {str(e)}. Please check your Azure configuration.")
+                    raise ValueError(
+                        f"Failed to initialize ChatOpenAI for Azure: {str(e)}. Please check your Azure configuration.")
         else:
             # Public OpenAI or compatible endpoint
             logger.info(f"Initializing ChatOpenAI with model: {settings.openai_model}")
@@ -89,7 +76,7 @@ class ChatService:
             }
             if settings.openai_base_url:
                 llm_kwargs["openai_api_base"] = settings.openai_base_url
-            
+
             try:
                 self.llm = ChatOpenAI(**llm_kwargs)
                 logger.info("ChatOpenAI initialized successfully")
@@ -102,11 +89,11 @@ class ChatService:
         self.conversations: Dict[str, List[Dict[str, Any]]] = {}
 
     async def chat(
-        self,
-        message: str,
-        conversation_id: Optional[str] = None,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None
+            self,
+            message: str,
+            conversation_id: Optional[str] = None,
+            max_tokens: Optional[int] = None,
+            temperature: Optional[float] = None
     ) -> Dict[str, Any]:
         """Handle chat interaction with RAG."""
         # Generate conversation ID if not provided
@@ -130,7 +117,7 @@ class ChatService:
             # Get conversation history
             conversation_history = self.conversations.get(conversation_id, [])
 
-            # Create prompt with context and history
+            # Create a prompt with context and history
             system_prompt = self._create_system_prompt(context)
             messages = self._build_messages(system_prompt, conversation_history, message)
 
@@ -182,7 +169,8 @@ class ChatService:
             logger.error(f"{error_msg}", exc_info=True)
             raise RuntimeError(error_msg) from e
 
-    def build_context(self, similar_docs: List[Dict[str, Any]]) -> str:
+    @staticmethod
+    def build_context(similar_docs: List[Dict[str, Any]]) -> str:
         """Build context string from retrieved documents."""
         if not similar_docs:
             return "No relevant documents found."
@@ -195,8 +183,9 @@ class ChatService:
 
         return "\n---\n".join(context_parts)
 
-    def _create_system_prompt(self, context: str) -> str:
-        """Create system prompt with context."""
+    @staticmethod
+    def _create_system_prompt(context: str) -> str:
+        """Create a system prompt with context."""
         return f"""
         You are an expert AI onboarding assistant for the **RAG Chatbot API** project - a FastAPI-based system using Retrieval-Augmented Generation to answer questions from project documents. Your mission is to help new team members understand and contribute to this project quickly, reducing mentor workload by 80%+.
         ═══════════════════════════════════════════════════════════════════
@@ -242,10 +231,10 @@ class ChatService:
         """
 
     def _build_messages(
-        self,
-        system_prompt: str,
-        history: List[Dict[str, Any]],
-        current_message: str
+            self,
+            system_prompt: str,
+            history: List[Dict[str, Any]],
+            current_message: str
     ) -> List[Any]:
         """Build message list for LLM."""
         messages = [SystemMessage(content=system_prompt)]
@@ -260,7 +249,7 @@ class ChatService:
             elif msg["role"] == "assistant":
                 messages.append(AIMessage(content=msg["content"]))
 
-        # Add current message
+        # Add the current message
         messages.append(HumanMessage(content=current_message))
         return messages
 
@@ -271,7 +260,7 @@ class ChatService:
 
         conversation = self.conversations[conversation_id]
 
-        # Add user message
+        # Add the user message
         conversation.append({
             "role": "user",
             "content": user_message,
@@ -290,7 +279,8 @@ class ChatService:
         if len(conversation) > max_length:
             self.conversations[conversation_id] = conversation[-max_length:]
 
-    def _format_sources(self, similar_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _format_sources(similar_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Format source documents for response."""
         sources = []
         for doc in similar_docs:
@@ -320,4 +310,3 @@ class ChatService:
     def list_conversations(self) -> List[str]:
         """List all conversation IDs."""
         return list(self.conversations.keys())
-

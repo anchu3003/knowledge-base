@@ -93,6 +93,10 @@ DEFAULT_TEMPERATURE=0.7
 
 ## Xử lý lỗi
 
+### Lỗi không tìm thấy package ở local
+- Chạy lệnh sau install các package trong requirements.txt
+- D:\pythonProject\Scripts\python.exe -m pip install fastapi uvicorn pydantic pydantic-settings langchain langchain-openai langchain-community langchain_huggingface chromadb sentence_transformers
+
 ### Lỗi kết nối
 
 - Kiểm tra `OPENAI_API_KEY` đã đúng chưa

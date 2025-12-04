@@ -13,16 +13,14 @@ ENV CHROMA_TELEMETRY_ENABLED=false \
     LANGSMITH_API_KEY=""
 
 # Cài đặt các gói hệ thống cần thiết (nếu có gói biên dịch như chromadb, pydantic,...)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl \
+&& rm -rf /var/lib/apt/lists/*
 
 # Copy file requirements
 COPY requirements.txt .
 
 # Cài thư viện Python
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel && pip install --no-cache-dir -r requirements.txt
 
 # Copy toàn bộ source vào container
 COPY . .

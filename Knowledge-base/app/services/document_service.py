@@ -1,23 +1,23 @@
+import asyncio
 import logging
 import warnings
-import chromadb
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, Any, List
-import asyncio
+
+import chromadb
 
 # Suppress ChromaDB telemetry warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*telemetry.*")
 warnings.filterwarnings("ignore", category=UserWarning, message=".*capture.*")
 
 from chromadb.config import Settings as ChromaSettings
-from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownTextSplitter
-from langchain.schema import Document
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import (
     TextLoader,
     PythonLoader,
-    UnstructuredMarkdownLoader,
     JSONLoader,
     UnstructuredWordDocumentLoader,
     PyPDFLoader,
@@ -45,8 +45,7 @@ class DocumentService:
             settings=ChromaSettings(anonymized_telemetry=False)
         )
 
-
-        # Get or create collection
+        # Get or create a collection
         try:
             self.collection = self.chroma_client.get_collection(settings.collection_name)
         except Exception:
@@ -73,7 +72,7 @@ class DocumentService:
         self.executor = ThreadPoolExecutor(max_workers=4)
 
     async def auto_load_documents(self) -> Dict[str, Any]:
-        """Auto-load documents from the default documents folder"""
+        """Autoload documents from the default documents folder"""
         documents_folder = Path(self.settings.documents_folder)
 
         if not documents_folder.exists():
@@ -153,7 +152,7 @@ class DocumentService:
     async def _process_single_file(self, file_path: Path) -> List[Document]:
         """Process a single file and return document chunks"""
         try:
-            # Load document based on file type
+            # Load document based on the file type
             loader = self.get_loader(file_path)
 
             loop = asyncio.get_event_loop()
@@ -177,8 +176,9 @@ class DocumentService:
             logger.error(f"Error processing file {file_path}: {str(e)}")
             raise
 
-    def get_loader(self, file_path: Path):
-        """Get appropriate document loader based on file extension"""
+    @staticmethod
+    def get_loader(file_path: Path):
+        """Get the appropriate document loader based on file extension"""
         extension = file_path.suffix.lower()
 
         if extension == ".py":
@@ -194,8 +194,7 @@ class DocumentService:
         else:
             # Default loader for text and similar files
             return TextLoader(str(file_path), encoding="utf-8")
-        
-    
+
     async def _add_documents_to_db(self, documents: List[Document]):
         """Add documents to ChromaDB vector database"""
         if not documents:
@@ -203,7 +202,7 @@ class DocumentService:
 
         # Extract texts and metadata
         texts = [doc.page_content for doc in documents]
-        metadatas = [doc.metadata for doc in documents]
+        metadata = [doc.metadata for doc in documents]
 
         # Generate embeddings asynchronously
         loop = asyncio.get_event_loop()
@@ -221,7 +220,7 @@ class DocumentService:
             self.collection.add(
                 embeddings=embeddings,
                 documents=texts,
-                metadatas=metadatas,
+                metadatas=metadata,
                 ids=ids
             )
             logger.info(f"Added {len(texts)} documents to ChromaDB collection.")
@@ -253,21 +252,21 @@ class DocumentService:
         similar_docs = []
         if results.get("documents") and results["documents"][0]:
             for i, (doc, metadata, distance) in enumerate(zip(
-                results["documents"][0],
-                results["metadatas"][0],
-                results["distances"][0]
+                    results["documents"][0],
+                    results["metadatas"][0],
+                    results["distances"][0]
             )):
                 similar_docs.append({
                     "content": doc,
                     "metadata": metadata,
-                    "score": 1 - distance,   # Convert distance to similarity score
+                    "score": 1 - distance,  # Convert distance to similarity score
                     "rank": i + 1
                 })
 
         return similar_docs
 
     async def get_status(self) -> Dict[str, Any]:
-        """Get status of the document database"""
+        """Get the status of the document database"""
         try:
             count = self.collection.count()
             return {
