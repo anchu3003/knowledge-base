@@ -16,18 +16,6 @@ class HealthResponse(BaseModel):
 # ------------------------------
 # Document Upload
 # ------------------------------
-class DocumentUploadRequest(BaseModel):
-    """Request model for document upload"""
-    folder_path: str = Field(..., description="Path to the folder containing documents to process")
-    file_patterns: Optional[List[str]] = Field(
-        default=[
-            "*.py", "*.md", "*.txt", "*.json", "*.yaml",
-            "*.yml", "*.rst", "*.docx", "*.pdf"
-        ],
-        description="List of file patterns to include"
-    )
-
-
 class DocumentUploadResponse(BaseModel):
     """Response model for document upload"""
     success: bool
@@ -73,7 +61,7 @@ class DocumentSource(BaseModel):
 # ------------------------------
 
 class ConversationMessage(BaseModel):
-    """Model for conversation message"""
+    """Model for a conversation message"""
     role: str = Field(..., description="Role: 'user' or 'assistant'")
     content: str = Field(..., description="Message content")
     timestamp: Optional[str] = None

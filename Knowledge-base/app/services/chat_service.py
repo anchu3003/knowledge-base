@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import (
+    HumanMessage, AIMessage, SystemMessage)
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from openai import APIError, APIConnectionError, AuthenticationError, RateLimitError
 
@@ -35,8 +36,6 @@ class ChatService:
                     self.llm = AzureChatOpenAI(
                         azure_deployment=settings.openai_model,
                         azure_endpoint=settings.openai_base_url,
-                        openai_api_version=settings.openai_api_version,
-                        openai_api_key=settings.openai_api_key,
                         temperature=settings.default_temperature,
                         max_tokens=settings.default_max_tokens
                     )
@@ -51,7 +50,7 @@ class ChatService:
                     f"Using ChatOpenAI for Azure with endpoint: {settings.openai_base_url}, deployment: {settings.openai_model}")
                 try:
                     self.llm = ChatOpenAI(
-                        openai_api_key=settings.openai_api_key,
+                        api_key=settings.openai_api_key,
                         temperature=settings.default_temperature,
                         max_tokens=settings.default_max_tokens,
                         model_kwargs={
@@ -237,7 +236,7 @@ class ChatService:
             current_message: str
     ) -> List[Any]:
         """Build message list for LLM."""
-        messages = [SystemMessage(content=system_prompt)]
+        messages: List[Any] = [SystemMessage(content=system_prompt)]
 
         # Add conversation history (limit to relevant messages)
         max_history = self.settings.max_conversation_length

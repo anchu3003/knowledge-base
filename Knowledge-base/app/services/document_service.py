@@ -48,7 +48,7 @@ class DocumentService:
         # Get or create a collection
         try:
             self.collection = self.chroma_client.get_collection(settings.collection_name)
-        except Exception:
+        except ValueError:
             self.collection = self.chroma_client.create_collection(
                 name=settings.collection_name,
                 metadata={"description": "RAG documents collection"}
@@ -156,7 +156,7 @@ class DocumentService:
             loader = self.get_loader(file_path)
 
             loop = asyncio.get_event_loop()
-            documents = await loop.run_in_executor(self.executor, loader.load)
+            documents = await loop.run_in_executor(self.executor, lambda x: loader.load(), None)
 
             # Split documents into chunks
             chunks = self.text_splitter.split_documents(documents)

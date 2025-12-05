@@ -22,7 +22,6 @@ from app.services.chat_service import ChatService
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
-    DocumentUploadRequest,
     DocumentUploadResponse,
     HealthResponse
 )
@@ -33,7 +32,7 @@ chat_service: Optional[ChatService] = None
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(application: FastAPI):
     """Initialize services on startup and cleanup on shutdown"""
     global document_service, chat_service
 
@@ -41,41 +40,40 @@ async def lifespan(app: FastAPI):
     chat_service = None
 
     try:
-        settings = get_settings()
-
+        setting = get_settings()
         # Initialize services
         try:
-            print("🔄 Initializing document service...")
-            document_service = DocumentService(settings)
-            print("✅ Document service initialized")
+            print("Initializing document service...")
+            document_service = DocumentService(setting)
+            print("Document service initialized")
         except Exception as e:
-            print(f"❌ Failed to initialize document service: {str(e)}")
+            print(f"Failed to initialize document service: {str(e)}")
             raise
 
         try:
-            print("🔄 Initializing chat service...")
-            chat_service = ChatService(settings, document_service)
-            print("✅ Chat service initialized")
+            print("Initializing chat service...")
+            chat_service = ChatService(setting, document_service)
+            print("Chat service initialized")
         except Exception as e:
-            print(f"❌ Failed to initialize chat service: {str(e)}")
+            print(f"Failed to initialize chat service: {str(e)}")
             raise
 
         # Auto-load documents if enabled
-        if settings.auto_load_on_startup:
-            print("🔄 Auto-loading documents from 'documents' folder...")
+        if setting.auto_load_on_startup:
+            print("Auto-loading documents from 'documents' folder...")
             try:
                 result = await document_service.auto_load_documents()
                 if result["processed_files"] > 0:
-                    print(f"✅ Auto-loaded {result['processed_files']} files, {result['total_chunks']} chunks")
+                    print(f"Auto-loaded {result['processed_files']} files, {result['total_chunks']} chunks")
                 else:
-                    print("ℹ️ No documents found to auto-load")
+                    print("No documents found to auto-load")
             except Exception as e:
-                print(f"⚠️ Warning: Error auto-loading documents: {str(e)}")
-                print("⚠️ Continuing startup without auto-loaded documents...")
+                print(f"Warning: Error auto-loading documents: {str(e)}")
+                print("Continuing startup without auto-loaded documents...")
 
-        print("🚀 RAG Chatbot API initialized successfully")
+        print("RAG Chatbot API initialized successfully")
     except Exception as e:
-        print(f"❌ Fatal error during startup: {str(e)}")
+        print(f"Fatal error during startup: {str(e)}")
         import traceback
         traceback.print_exc()
         # Re-raise to prevent the app from starting in an invalid state
@@ -89,9 +87,9 @@ async def lifespan(app: FastAPI):
         try:
             if document_service:
                 await document_service.cleanup()
-            print("🛑 RAG Chatbot API shutdown complete")
+            print("RAG Chatbot API shutdown complete")
         except Exception as e:
-            print(f"⚠️ Error during cleanup: {str(e)}")
+            print(f"Error during cleanup: {str(e)}")
 
 
 # Create FastAPI app
@@ -146,16 +144,6 @@ async def root():
     )
 
 
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint"""
-    return HealthResponse(
-        status="healthy",
-        message="All services are operational",
-        version="1.0.0"
-    )
-
-
 @app.post("/documents/refresh", response_model=DocumentUploadResponse)
 async def refresh_documents(
         service: DocumentService = Depends(get_document_service)
@@ -187,13 +175,11 @@ async def refresh_documents(
 
 
 @app.get("/documents/folder-info")
-async def get_documents_folder_info(
-        service: DocumentService = Depends(get_document_service)
-):
+async def get_documents_folder_info():
     """Get information about the documents folder"""
     try:
-        settings = get_settings()
-        docs_folder = Path(settings.documents_folder)
+        setting = get_settings()
+        docs_folder = Path(setting.documents_folder)
 
         if not docs_folder.exists():
             return {
@@ -239,50 +225,17 @@ async def get_documents_folder_info(
         )
 
 
-@app.post("/documents/upload", response_model=DocumentUploadResponse)
-async def upload_documents(
-        request: DocumentUploadRequest,
-        service: DocumentService = Depends(get_document_service)
-):
-    """Upload and process documents from a specified folder"""
-    try:
-        result = await service.process_documents(
-            folder_path=request.folder_path,
-            file_patterns=request.file_patterns
-        )
-
-        return DocumentUploadResponse(
-            success=True,
-            message=f"Processed {result['processed_files']} files successfully.",
-            processed_files=result["processed_files"],
-            total_chunks=result["total_chunks"],
-            details=result.get("details", [])
-        )
-
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload documents: {str(e)}"
-        )
-
-
 @app.post("/chat", response_model=ChatResponse)
 async def chat(
         request: ChatRequest,
-        chat_service: ChatService = Depends(get_chat_service)
+        service: ChatService = Depends(get_chat_service)
 ):
     """
     Chat with the RAG system about the uploaded documents.
     The system will retrieve relevant context and generate responses.
     """
     try:
-        response = await chat_service.chat(
+        response = await service.chat(
             message=request.message,
             conversation_id=request.conversation_id,
             max_tokens=request.max_tokens,
