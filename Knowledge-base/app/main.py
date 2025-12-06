@@ -6,7 +6,8 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+import json
 
 # Suppress ChromaDB telemetry warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*telemetry.*")
@@ -254,6 +255,27 @@ async def chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Chat failed: {str(e)}"
         )
+
+
+@app.post("/chat/stream")
+async def chat_stream(
+        request: ChatRequest,
+        service: ChatService = Depends(get_chat_service)
+):
+    """Stream chat responses as Server-Sent Events (SSE).
+
+    Each event is a JSON object with a `type` field among: start, token, end, error.
+    """
+    async def event_generator():
+        async for event in service.stream_chat(
+            message=request.message,
+            conversation_id=request.conversation_id,
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.get("/documents/status")

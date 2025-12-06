@@ -2,7 +2,7 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, AsyncIterator
 
 from langchain_core.messages import (
     HumanMessage, AIMessage, SystemMessage)
@@ -163,10 +163,121 @@ class ChatService:
             error_msg = f"API error: {str(e)}"
             logger.error(f"{error_msg} Details: {str(e)}")
             raise RuntimeError(error_msg) from e
+
+    async def stream_chat(
+            self,
+            message: str,
+            conversation_id: Optional[str] = None,
+            max_tokens: Optional[int] = None,
+            temperature: Optional[float] = None
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Stream chat response tokens as an async iterator of events.
+
+        Yields dict events with keys:
+        - type: one of "start", "token", "end", "error"
+        - other fields depending on the type
+        """
+        # Generate conversation ID if not provided
+        if conversation_id is None:
+            conversation_id = str(uuid.uuid4())
+
+        # Set parameters
+        max_tokens = max_tokens or self.settings.default_max_tokens
+        temperature = temperature or self.settings.default_temperature
+
+        try:
+            # Search for relevant documents
+            similar_docs = await self.document_service.search_similar_documents(
+                query=message,
+                k=self.settings.retrieval_k
+            )
+
+            # Build context from retrieved documents
+            context = self.build_context(similar_docs)
+
+            # Get conversation history
+            conversation_history = self.conversations.get(conversation_id, [])
+
+            # Create a prompt with context and history
+            system_prompt = self._create_system_prompt(context)
+            messages = self._build_messages(system_prompt, conversation_history, message)
+
+            # Update LLM parameters
+            self.llm.temperature = temperature
+            self.llm.max_tokens = max_tokens
+
+            # Send start event
+            yield {
+                "type": "start",
+                "conversation_id": conversation_id,
+                "metadata": {
+                    "retrieved_documents": len(similar_docs),
+                    "timestamp": datetime.now().isoformat(),
+                    "model": self.settings.openai_model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens
+                }
+            }
+
+            full_text = ""
+            async for chunk in self.llm.astream(messages):
+                # chunk is typically an AIMessageChunk with .content containing incremental text
+                delta = getattr(chunk, "content", None)
+                if not delta:
+                    # Some providers may use .text or other attributes
+                    delta = getattr(chunk, "text", "")
+                if not delta:
+                    continue
+                full_text += delta
+                yield {"type": "token", "token": delta}
+
+            # Update conversation history after completion
+            self._update_conversation(conversation_id, message, full_text)
+
+            # Prepare sources information
+            sources = self._format_sources(similar_docs)
+
+            yield {
+                "type": "end",
+                "answer": full_text,
+                "conversation_id": conversation_id,
+                "sources": sources,
+                "metadata": {
+                    "retrieved_documents": len(similar_docs),
+                    "timestamp": datetime.now().isoformat(),
+                    "model": self.settings.openai_model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens
+                }
+            }
+
+        except (APIConnectionError, ConnectionError) as e:
+            error_msg = (
+                f"Connection error: Unable to connect to OpenAI/Azure endpoint. "
+                f"Please check your network connection and endpoint URL "
+                f"({self.settings.openai_base_url or 'default'})."
+            )
+            logger.error(f"{error_msg} Details: {str(e)}")
+            yield {"type": "error", "message": error_msg}
+        except AuthenticationError as e:
+            error_msg = (
+                "Authentication error: Invalid API key or credentials. "
+                "Please check your OPENAI_API_KEY."
+            )
+            logger.error(f"{error_msg} Details: {str(e)}")
+            yield {"type": "error", "message": error_msg}
+        except RateLimitError as e:
+            error_msg = "Rate limit exceeded: Too many requests. Please try again later."
+            logger.error(f"{error_msg} Details: {str(e)}")
+            yield {"type": "error", "message": error_msg}
+        except APIError as e:
+            error_msg = f"API error: {str(e)}"
+            logger.error(f"{error_msg} Details: {str(e)}")
+            yield {"type": "error", "message": error_msg}
         except Exception as e:
-            error_msg = f"Unexpected error during chat: {str(e)}"
+            error_msg = f"Unexpected error during chat (stream): {str(e)}"
             logger.error(f"{error_msg}", exc_info=True)
-            raise RuntimeError(error_msg) from e
+            yield {"type": "error", "message": error_msg}
 
     @staticmethod
     def build_context(similar_docs: List[Dict[str, Any]]) -> str:
