@@ -202,31 +202,43 @@ class DocumentService:
 
         # Extract texts and metadata
         texts = [doc.page_content for doc in documents]
-        metadata = [doc.metadata for doc in documents]
+        metadatas = [doc.metadata for doc in documents]
 
-        # Generate embeddings asynchronously
+        batch_size = max(1, self.settings.embedding_batch_size)
+        total = len(texts)
         loop = asyncio.get_event_loop()
-        embeddings = await loop.run_in_executor(
-            self.executor,
-            self.embeddings.embed_documents,
-            texts
-        )
 
-        # Generate unique IDs
-        ids = [f"doc_{i}_{abs(hash(text[:100]))}" for i, text in enumerate(texts)]
+        added = 0
+        for start in range(0, total, batch_size):
+            end = min(start + batch_size, total)
+            batch_texts = texts[start:end]
+            batch_metas = metadatas[start:end]
 
-        # Add to ChromaDB collection
-        try:
-            self.collection.add(
-                embeddings=embeddings,
-                documents=texts,
-                metadatas=metadata,
-                ids=ids
+            # Compute embeddings for this batch off the event loop
+            embeddings = await loop.run_in_executor(
+                self.executor,
+                self.embeddings.embed_documents,
+                batch_texts,
             )
-            logger.info(f"Added {len(texts)} documents to ChromaDB collection.")
-        except Exception as e:
-            logger.error(f"Error adding documents to ChromaDB: {e}")
-            raise
+
+            # Generate unique IDs for the batch (stable-ish based on content snippet)
+            ids = [f"doc_{i}_{abs(hash(t[:100]))}" for i, t in enumerate(batch_texts, start=start)]
+
+            # Add batch to ChromaDB
+            try:
+                self.collection.add(
+                    embeddings=embeddings,
+                    documents=batch_texts,
+                    metadatas=batch_metas,
+                    ids=ids,
+                )
+                added += len(batch_texts)
+                logger.info(f"Added batch {start}-{end - 1} ({len(batch_texts)}) documents to ChromaDB collection.")
+            except Exception as e:
+                logger.error(f"Error adding batch {start}-{end - 1} to ChromaDB: {e}")
+                raise
+
+        logger.info(f"Finished adding {added}/{total} documents to ChromaDB in batches of {batch_size}.")
 
     async def search_similar_documents(self, query: str, k: int = None) -> List[Dict[str, Any]]:
         """Search for similar documents"""

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     chunk_size: int = Field(default=1000, alias="CHUNK_SIZE")
     chunk_overlap: int = Field(default=200, alias="CHUNK_OVERLAP")
     max_file_size_mb: int = Field(default=10, alias="MAX_FILE_SIZE_MB")
+    embedding_batch_size: int = Field(default=64, alias="EMBEDDING_BATCH_SIZE")
 
     # Supported file types
     supported_extensions: List[str] = Field(
