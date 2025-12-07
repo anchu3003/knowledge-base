@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     retrieval_k: int = Field(default=5, alias="RETRIEVAL_K")
     similarity_threshold: float = Field(default=0.7, alias="SIMILARITY_THRESHOLD")
 
+    # Hybrid Retrieval and Re-ranking
+    enable_bm25: bool = Field(default=True, alias="ENABLE_BM25")
+    enable_hybrid: bool = Field(default=True, alias="ENABLE_HYBRID")
+    hybrid_alpha: float = Field(default=0.5, alias="HYBRID_ALPHA")  # weight for dense vs. sparse
+    hybrid_candidate_k: int = Field(default=20, alias="HYBRID_CANDIDATE_K")
+    enable_rerank: bool = Field(default=True, alias="ENABLE_RERANK")
+    rerank_top_n: int = Field(default=20, alias="RERANK_TOP_N")
+    rerank_model: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2", alias="RERANK_MODEL")
+
     # Chat Settings
     default_temperature: float = Field(default=0.7, alias="DEFAULT_TEMPERATURE")
     default_max_tokens: int = Field(default=1000, alias="DEFAULT_MAX_TOKENS")

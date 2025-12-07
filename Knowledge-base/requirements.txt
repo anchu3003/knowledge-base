@@ -12,3 +12,4 @@ langchain_huggingface
 chromadb
 
 sentence_transformers
+rank-bm25
