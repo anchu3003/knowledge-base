@@ -104,11 +104,50 @@ class ChatService:
         temperature = temperature or self.settings.default_temperature
 
         try:
-            # Search for relevant documents
+            # Initial retrieval
+            used_query = message
+            rewrite_attempts = 0
             similar_docs = await self.document_service.search_similar_documents(
-                query=message,
+                query=used_query,
                 k=self.settings.retrieval_k
             )
+
+            # Optionally perform query rewriting if retrieval quality is poor
+            if self.settings.enable_query_rewrite:
+                def _quality(docs: List[Dict[str, Any]]) -> tuple[int, float]:
+                    counts = len(docs)
+                    top_score = docs[0]["score"] if docs else 0.0
+                    return counts, float(top_score)
+
+                count, top = _quality(similar_docs)
+                target_min = self.settings.rewrite_min_results
+                target_top = self.settings.rewrite_min_top_score
+
+                if count < target_min or top < target_top:
+                    best_docs = similar_docs
+                    best_count, best_top = count, top
+                    for _ in range(max(0, self.settings.rewrite_max_attempts)):
+                        rewrite_attempts += 1
+                        rewritten = await self._rewrite_query(used_query)
+                        # Avoid infinite loops if the model echoes the same query
+                        if rewritten and rewritten.strip() and rewritten.strip() != used_query.strip():
+                            candidate_docs = await self.document_service.search_similar_documents(
+                                query=rewritten,
+                                k=self.settings.retrieval_k
+                            )
+                            c_count, c_top = _quality(candidate_docs)
+                            # Prefer higher count, break ties by top score
+                            if (c_count > best_count) or (c_count == best_count and c_top > best_top):
+                                best_docs = candidate_docs
+                                best_count, best_top = c_count, c_top
+                                used_query = rewritten
+                            # Stop early if we already meet thresholds
+                            if best_count >= target_min and best_top >= target_top:
+                                break
+                        else:
+                            # No meaningful rewrite; stop trying
+                            break
+                    similar_docs = best_docs
 
             # Build context from retrieved documents
             context = self.build_context(similar_docs)
@@ -143,7 +182,11 @@ class ChatService:
                     "timestamp": datetime.now().isoformat(),
                     "model": self.settings.openai_model,
                     "temperature": temperature,
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens,
+                    "original_query": message,
+                    "used_query": used_query,
+                    "query_rewrite_enabled": self.settings.enable_query_rewrite,
+                    "query_rewrite_attempts": rewrite_attempts
                 }
             }
 
@@ -186,11 +229,46 @@ class ChatService:
         temperature = temperature or self.settings.default_temperature
 
         try:
-            # Search for relevant documents
+            # Initial retrieval
+            used_query = message
+            rewrite_attempts = 0
             similar_docs = await self.document_service.search_similar_documents(
-                query=message,
+                query=used_query,
                 k=self.settings.retrieval_k
             )
+
+            # Optional query rewrite if results are weak
+            if self.settings.enable_query_rewrite:
+                def _quality(docs: List[Dict[str, Any]]) -> tuple[int, float]:
+                    counts = len(docs)
+                    top_score = docs[0]["score"] if docs else 0.0
+                    return counts, float(top_score)
+
+                count, top = _quality(similar_docs)
+                target_min = self.settings.rewrite_min_results
+                target_top = self.settings.rewrite_min_top_score
+
+                if count < target_min or top < target_top:
+                    best_docs = similar_docs
+                    best_count, best_top = count, top
+                    for _ in range(max(0, self.settings.rewrite_max_attempts)):
+                        rewrite_attempts += 1
+                        rewritten = await self._rewrite_query(used_query)
+                        if rewritten and rewritten.strip() and rewritten.strip() != used_query.strip():
+                            candidate_docs = await self.document_service.search_similar_documents(
+                                query=rewritten,
+                                k=self.settings.retrieval_k
+                            )
+                            c_count, c_top = _quality(candidate_docs)
+                            if (c_count > best_count) or (c_count == best_count and c_top > best_top):
+                                best_docs = candidate_docs
+                                best_count, best_top = c_count, c_top
+                                used_query = rewritten
+                            if best_count >= target_min and best_top >= target_top:
+                                break
+                        else:
+                            break
+                    similar_docs = best_docs
 
             # Build context from retrieved documents
             context = self.build_context(similar_docs)
@@ -215,7 +293,11 @@ class ChatService:
                     "timestamp": datetime.now().isoformat(),
                     "model": self.settings.openai_model,
                     "temperature": temperature,
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens,
+                    "original_query": message,
+                    "used_query": used_query,
+                    "query_rewrite_enabled": self.settings.enable_query_rewrite,
+                    "query_rewrite_attempts": rewrite_attempts
                 }
             }
 
@@ -247,7 +329,11 @@ class ChatService:
                     "timestamp": datetime.now().isoformat(),
                     "model": self.settings.openai_model,
                     "temperature": temperature,
-                    "max_tokens": max_tokens
+                    "max_tokens": max_tokens,
+                    "original_query": message,
+                    "used_query": used_query,
+                    "query_rewrite_enabled": self.settings.enable_query_rewrite,
+                    "query_rewrite_attempts": rewrite_attempts
                 }
             }
 
@@ -278,6 +364,42 @@ class ChatService:
             error_msg = f"Unexpected error during chat (stream): {str(e)}"
             logger.error(f"{error_msg}", exc_info=True)
             yield {"type": "error", "message": error_msg}
+
+    async def _rewrite_query(self, original_query: str) -> str:
+        """Use the LLM to rewrite the user query to improve retrieval.
+
+        Returns a concise rewritten query string. If rewriting fails, returns the original.
+        """
+        try:
+            system = SystemMessage(content=(
+                "You are a query reformulation assistant for a Retrieval-Augmented Generation (RAG) system.\n"
+                "Rewrite the user's query to best retrieve relevant documentation snippets from a developer knowledge base.\n"
+                "Guidelines:\n"
+                "- Be concise (5-25 words).\n"
+                "- Expand with key technical terms, synonyms, and likely file or technology names when helpful.\n"
+                "- Remove pronouns and vague words; keep only essential keywords.\n"
+                "- Do NOT answer the question; output only the rewritten search query."
+            ))
+            human = HumanMessage(content=f"Original query: {original_query}\nRewritten search query:")
+
+            # Temporarily adjust parameters for rewriting
+            prev_temp = getattr(self.llm, "temperature", 0.7)
+            prev_max = getattr(self.llm, "max_tokens", 256)
+            try:
+                self.llm.temperature = 0.2
+                self.llm.max_tokens = 64
+                resp = await self.llm.agenerate([[system, human]])
+            finally:
+                self.llm.temperature = prev_temp
+                self.llm.max_tokens = prev_max
+
+            text = resp.generations[0][0].text.strip()
+            # Ensure a single-line short query
+            text = text.splitlines()[0].strip()
+            return text or original_query
+        except Exception as e:
+            logger.warning(f"Query rewrite failed: {e}")
+            return original_query
 
     @staticmethod
     def build_context(similar_docs: List[Dict[str, Any]]) -> str:

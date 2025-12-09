@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Supported file types
     supported_extensions: List[str] = Field(
-        default=[".py", ".md", ".txt", ".json", ".yml", ".docx", ".pdf"],
+        default=[".md", ".docx", ".pdf", ".txt", ".json"],
         alias="SUPPORTED_EXTENSIONS"
     )
 
@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # RAG Settings
     retrieval_k: int = Field(default=5, alias="RETRIEVAL_K")
     similarity_threshold: float = Field(default=0.7, alias="SIMILARITY_THRESHOLD")
+
+    # Query Rewriting Settings
+    enable_query_rewrite: bool = Field(default=True, alias="ENABLE_QUERY_REWRITE")
+    rewrite_min_results: int = Field(default=2, alias="REWRITE_MIN_RESULTS")
+    rewrite_min_top_score: float = Field(default=0.3, alias="REWRITE_MIN_TOP_SCORE")
+    rewrite_max_attempts: int = Field(default=2, alias="REWRITE_MAX_ATTEMPTS")
 
     # Hybrid Retrieval and Re-ranking
     enable_bm25: bool = Field(default=True, alias="ENABLE_BM25")

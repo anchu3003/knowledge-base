@@ -4,21 +4,21 @@ import logging
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Any as TypingAny
+from typing import Dict, Any, List, Optional, Tuple, Any as TypingAny, Mapping
 
 import chromadb
+from chromadb import SparseVector
 
 # Suppress ChromaDB telemetry warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*telemetry.*")
 warnings.filterwarnings("ignore", category=UserWarning, message=".*capture.*")
 
 from chromadb.config import Settings as ChromaSettings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import (
     TextLoader,
-    PythonLoader,
     JSONLoader,
     UnstructuredWordDocumentLoader,
     PyPDFLoader,
@@ -55,19 +55,19 @@ class DocumentService:
                 metadata={"description": "RAG documents collection"}
             )
 
-        # Initialize text splitter
+        # Normalize supported extensions (lowercase, leading dot)
+        self._supported_exts = [
+            ext.lower() if ext.startswith(".") else f".{ext.lower()}"
+            for ext in (self.settings.supported_extensions or [])
+        ]
+
+        # Default text splitter (used for plain text/json/docx/pdf unless overridden per type)
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
             length_function=len,
             separators=["\n\n", "\n", " ", ""]
         )
-
-        # self.text_splitter = MarkdownTextSplitter(
-        #     chunk_size=settings.chunk_size,
-        #     chunk_overlap=settings.chunk_overlap,
-        #     strip_headers=False
-        # )
 
         # Thread pool for file processing
         self.executor = ThreadPoolExecutor(max_workers=4)
@@ -108,7 +108,7 @@ class DocumentService:
             }
 
         # Default file patterns for supported extensions
-        file_patterns = [f"*{ext}" for ext in self.settings.supported_extensions]
+        file_patterns = [f"*{ext}" for ext in self._supported_exts]
         logger.info(f"Auto-loading documents from: {documents_folder}")
 
         result = await self.process_documents(str(documents_folder), file_patterns)
@@ -136,7 +136,7 @@ class DocumentService:
         valid_files = []
         for file_path in files_to_process:
             if file_path.is_file():
-                if file_path.suffix.lower() in self.settings.supported_extensions:
+                if file_path.suffix.lower() in self._supported_exts:
                     file_size_mb = file_path.stat().st_size / (1024 * 1024)
                     if file_size_mb <= self.settings.max_file_size_mb:
                         valid_files.append(file_path)
@@ -183,7 +183,8 @@ class DocumentService:
             documents = await loop.run_in_executor(self.executor, lambda x: loader.load(), None)
 
             # Split documents into chunks
-            chunks = self.text_splitter.split_documents(documents)
+            splitter = self.get_splitter(file_path)
+            chunks = splitter.split_documents(documents)
 
             # Add metadata
             for chunk in chunks:
@@ -205,9 +206,7 @@ class DocumentService:
         """Get the appropriate document loader based on file extension"""
         extension = file_path.suffix.lower()
 
-        if extension == ".py":
-            return PythonLoader(str(file_path))
-        elif extension == ".md":
+        if extension == ".md":
             return TextLoader(str(file_path), encoding="utf-8")
         elif extension == ".json":
             return JSONLoader(str(file_path), jq_schema=".")
@@ -215,9 +214,31 @@ class DocumentService:
             return UnstructuredWordDocumentLoader(str(file_path))
         elif extension == ".pdf":
             return PyPDFLoader(str(file_path))
-        else:
-            # Default loader for text and similar files
+        elif extension == ".txt":
             return TextLoader(str(file_path), encoding="utf-8")
+        else:
+            raise ValueError(f"Unsupported file type: {extension}")
+
+    def get_splitter(self, file_path: Path):
+        """Pick the best text splitter based on the file type."""
+        ext = file_path.suffix.lower()
+        if ext == ".md":
+            # Preserve Markdown structure for better semantic chunks
+            return MarkdownTextSplitter(
+                chunk_size=self.settings.chunk_size,
+                chunk_overlap=self.settings.chunk_overlap
+            )
+        elif ext in (".docx", ".pdf"):
+            # Slightly conservative splitting works well for OCR/page artifacts
+            return RecursiveCharacterTextSplitter(
+                chunk_size=self.settings.chunk_size,
+                chunk_overlap=self.settings.chunk_overlap,
+                length_function=len,
+                separators=["\n\n", "\n", " ", ""]
+            )
+        else:
+            # Default for .txt and .json
+            return self.text_splitter
 
     async def _add_documents_to_db(self, documents: List[Document]):
         """Add documents to ChromaDB vector database"""
@@ -317,7 +338,8 @@ class DocumentService:
             include=["documents", "metadatas", "distances"],
         )
 
-        dense_items: List[Tuple[str, str, Dict[str, Any], float]] = []  # (id, doc, meta, score)
+        dense_items: List[Tuple[str, str, Mapping[
+            str, str | int | float | bool | SparseVector | None], float]] = []  # (id, doc, meta, score)
         if dense_results.get("documents") and dense_results["documents"][0]:
             for doc_id, doc, meta, dist in zip(
                     dense_results.get("ids", [[None]])[0],
@@ -357,7 +379,7 @@ class DocumentService:
                 return [1.0 for _ in scores]
             return [((s1 - mn) / (mx - mn)) for s1 in scores]
 
-        dense_score_map: Dict[str, Tuple[str, Dict[str, Any], float]] = {}
+        dense_score_map: Dict[str, Tuple[str, Mapping[str, str | int | float | bool | SparseVector | None], float]] = {}
         dense_ids = []
         dense_vals = []
         for doc_id, doc, meta, score in dense_items:
