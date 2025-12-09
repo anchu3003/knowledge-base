@@ -1,107 +1,163 @@
 # RAG Chatbot API
 
-API chatbot sử dụng RAG để trả lời câu hỏi dựa trên tài liệu của dự án.
+Retrieval-Augmented Generation (RAG) chatbot API for asking questions over your project documentation and files.
 
-## Tính năng
+This README consolidates the current, working setup based on the repository source. Outdated info from the previous README has been corrected. Unknown or unverified items are marked as TODO.
 
-- Tự động xử lý tài liệu từ thư mục `documents/`
-- Chat với tài liệu để hỏi đáp về nội dung
-- Hỗ trợ nhiều định dạng: `.py`, `.md`, `.txt`, `.json`, `.yml`, `.docx`, `.pdf`
-- Chạy dễ dàng với Docker
+## Overview
 
-## Cài đặt
+- Loads documents from `documents/` into a ChromaDB vector store
+- Retrieves relevant context and chats via OpenAI-compatible LLMs
+- Optional query rewrite, hybrid retrieval (dense + BM25), and re-ranking
+- Configurable system prompt from file
+- Run locally or with Docker/Docker Compose
 
-### 1. Tạo file `.env`
+## Tech Stack
 
-Tạo file `.env` trong thư mục gốc với nội dung:
+- Language: Python 3.11
+- Framework: FastAPI (served by Uvicorn)
+- RAG: LangChain, ChromaDB, sentence-transformers, BM25 re-ranking
+- Packaging: `requirements.txt` (pip)
+- Containerization: Docker, docker-compose
 
-```env
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://aiportalapi.stu-platform.l
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_API_TYPE=openai
-```
+## Requirements
 
-**Lưu ý:**
-- `OPENAI_BASE_URL`: URL endpoint của bạn (nếu dùng custom endpoint)
-- `OPENAI_MODEL`: Tên model hoặc deployment name
-- `OPENAI_API_TYPE`: `openai` (cho custom endpoint) hoặc `azure` (cho Azure OpenAI)
+- Python 3.11+
+- pip
+- Docker and Docker Compose (optional, for containerized run)
 
-### 2. Chạy với Docker
+## Quickstart (Docker Compose)
+
+1) Copy `.env.example` to `.env` and update values.
+
+2) Start the API:
 
 ```bash
 docker compose up -d --build
 ```
 
-### 3. Kiểm tra
+3) Open API docs:
 
-Mở trình duyệt: http://localhost:8000/docs
+- http://localhost:8000/docs
 
-## Sử dụng
+Default container name: `rag-chatbot-api` (from `docker-compose.yml`).
 
-### Thêm tài liệu
+## Local Setup (without Docker)
 
-Đặt các file vào thư mục `documents/`. API sẽ tự động xử lý khi khởi động.
+1) Python environment
 
-### Chat với tài liệu
+- Create and activate a virtual environment.
+  - PowerShell (Windows):
+    ```powershell
+    python -m venv .venv; .\.venv\Scripts\Activate.ps1
+    ```
+  - macOS/Linux:
+    ```bash
+    python3 -m venv .venv && source .venv/bin/activate
+    ```
 
-```bash
-POST http://localhost:8000/chat
-
-{
-  "message": "Làm thế nào để cài đặt dự án này?"
-}
-```
-
-### Làm mới tài liệu
-
-Nếu bạn thêm/sửa file trong `documents/`:
+2) Install dependencies
 
 ```bash
-POST http://localhost:8000/documents/refresh
+pip install -r requirements.txt
 ```
+
+3) Configure environment
+
+- Create `.env` in the project root (use `.env.example` as a starting point).
+
+4) Run the server
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Open http://localhost:8000/docs
+
+## How it Loads and Chats with Documents
+
+- On startup, if `AUTO_LOAD_ON_STARTUP=true`, the app recursively reads files under `DOCUMENTS_FOLDER` (default `./documents`) and indexes supported files into ChromaDB at `CHROMA_DB_PATH` (default `./chroma_db`).
+- During chat, it retrieves relevant chunks (`RETRIEVAL_K`, hybrid/BM25 if enabled), optionally re-ranks, builds context, and sends messages to the selected LLM.
 
 ## API Endpoints
 
-- `GET /` - Thông tin API
-- `GET /health` - Kiểm tra trạng thái
-- `POST /chat` - Chat với tài liệu
-- `POST /documents/refresh` - Làm mới tài liệu
-- `GET /documents/status` - Xem trạng thái database
-- `GET /documents/folder-info` - Xem thông tin folder
-- `DELETE /documents/clear` - Xóa tất cả tài liệu
+From `app/main.py`:
 
-Tài liệu API đầy đủ: http://localhost:8000/docs
+- `GET /` — Health/info (returns status, message, version)
+- `POST /chat` — Chat with the RAG system
+- `POST /chat/stream` — Chat with server-sent events (SSE) streaming
+- `POST /documents/refresh` — Clear and re-load from `DOCUMENTS_FOLDER`
+- `GET /documents/folder-info` — Inspect the docs folder and supported file counts
+- `GET /documents/status` — Status of the document store
+- `DELETE /documents/clear` — Clear all indexed documents
 
-## Cấu hình (tùy chọn)
+OpenAPI docs: http://localhost:8000/docs
 
-Thêm vào file `.env` nếu muốn tùy chỉnh:
+## Environment Variables
 
-```env
-# Thư mục tài liệu
-DOCUMENTS_FOLDER=./documents
+Defined in `app/core/config.py`. All can be provided via `.env`.
 
-# Tự động tải khi khởi động
-AUTO_LOAD_ON_STARTUP=true
+- OpenAI
+  - `OPENAI_API_KEY` (required)
+  - `OPENAI_BASE_URL` (required in most setups; see note below)
+  - `OPENAI_MODEL` (default: `gpt-3.5-turbo`)
+  - `OPENAI_EMBEDDING_MODEL` (default: `text-embedding-ada-002`)
+  - `OPENAI_API_TYPE` (default: `openai`)
+  - `OPENAI_API_VERSION` (default: `2023-05-15`)
 
-# Số lượng tài liệu liên quan lấy về
-RETRIEVAL_K=5
+- ChromaDB
+  - `CHROMA_DB_PATH` (default: `./chroma_db`)
+  - `COLLECTION_NAME` (default: `documents`)
 
-# Nhiệt độ mặc định
-DEFAULT_TEMPERATURE=0.7
-```
+- Document Processing
+  - `CHUNK_SIZE` (default: `1000`)
+  - `CHUNK_OVERLAP` (default: `200`)
+  - `MAX_FILE_SIZE_MB` (default: `10`)
+  - `EMBEDDING_BATCH_SIZE` (default: `64`)
 
-### Cấu hình prompt hệ thống (system prompt)
+- Documents Folder
+  - `DOCUMENTS_FOLDER` (default: `./documents`)
+  - `AUTO_LOAD_ON_STARTUP` (default: `true`)
 
-Bạn có thể cấu hình nội dung system prompt từ file thay vì hard-code trong mã nguồn.
+- RAG Retrieval and Ranking
+  - `RETRIEVAL_K` (default: `5`)
+  - `SIMILARITY_THRESHOLD` (default: `0.7`)
+  - `ENABLE_BM25` (default: `true`)
+  - `ENABLE_HYBRID` (default: `true`)
+  - `HYBRID_ALPHA` (default: `0.5`)
+  - `HYBRID_CANDIDATE_K` (default: `20`)
+  - `ENABLE_RERANK` (default: `true`)
+  - `RERANK_TOP_N` (default: `20`)
+  - `RERANK_MODEL` (default: `cross-encoder/ms-marco-MiniLM-L-6-v2`)
 
-1) Tạo thư mục chứa prompt:
+- Chat
+  - `DEFAULT_TEMPERATURE` (default: `0.7`)
+  - `DEFAULT_MAX_TOKENS` (default: `1000`)
+  - `MAX_CONVERSATION_LENGTH` (default: `10`)
+
+- Prompt Files
+  - `SYSTEM_PROMPT_PATH` (default: `./prompts/system_prompt.txt`)
+  - `REWRITE_SYSTEM_PROMPT_PATH` (default: `./prompts/rewrite_system_prompt.txt`)
+
+- Supported File Extensions
+  - `SUPPORTED_EXTENSIONS` — optional override for allowed extensions.
+    - Default in code: `[".md", ".docx", ".pdf", ".txt", ".json"]`
+    - Example in `.env.example`: `[".py", ".md", ".txt", ".json", ".yaml", ".yml", ".rst", ".docx", ".pdf"]`
+
+Note on `OPENAI_BASE_URL`:
+- The code expects it via env, but also initializes settings with an empty string for startup resilience. In practice, set a correct base URL (or use the default OpenAI endpoint for your chosen SDK/provider) to avoid runtime errors.
+
+## Prompts Configuration
+
+You can configure prompts via files instead of hard-coding:
+
+1) Create folder:
 
 ```
 prompts/
 ```
 
-2) Tạo file `prompts/system_prompt.txt` với nội dung template. Sử dụng placeholder `{context}` để chèn phần ngữ cảnh tài liệu đã truy hồi:
+2) Create `prompts/system_prompt.txt` (may include `{context}` placeholder):
 
 ```
 Bạn là trợ lý onboarding cho dự án RAG Chatbot API.\n
@@ -115,7 +171,7 @@ Hướng dẫn trả lời:
 - Giải thích các thuật ngữ kỹ thuật khi cần
 ```
 
-3) (Tuỳ chọn) Tạo file `prompts/rewrite_system_prompt.txt` để cấu hình prompt dành cho bước "viết lại truy vấn" (query rewrite). File này không cần placeholder:
+3) Optional: `prompts/rewrite_system_prompt.txt` for the query rewrite step (no placeholders required):
 
 ```
 You are a query reformulation assistant for a RAG system.
@@ -126,51 +182,71 @@ Guidelines:
 - Do NOT answer; output only the rewritten query.
 ```
 
-4) Khai báo đường dẫn trong `.env`:
+4) Add paths in `.env`:
 
 ```env
-# Prompt Settings
 SYSTEM_PROMPT_PATH=./prompts/system_prompt.txt
-# Tuỳ chọn cho bước rewrite:
 REWRITE_SYSTEM_PROMPT_PATH=./prompts/rewrite_system_prompt.txt
 ```
 
-Ghi chú:
-- Ứng dụng sẽ ưu tiên đọc prompt từ các file trên. Nếu file không tồn tại hoặc lỗi đọc, ứng dụng sẽ dùng prompt mặc định tích hợp sẵn.
-- Docker đã mount toàn bộ project vào container (`.:/app`), nên chỉ cần đảm bảo các file trong thư mục `prompts/` tồn tại cùng cấp với dự án.
+Notes:
+- If the files are missing or cannot be read, the app falls back to built-in prompts.
+- Docker mounts the project into the container (`.:/app`), so keep the `prompts/` folder in the project root.
 
-## Xử lý lỗi
+## Running and Scripts
 
-### Lỗi không tìm thấy package ở local
-- Chạy lệnh sau install các package trong requirements.txt
-- D:\pythonProject\Scripts\python.exe -m pip install fastapi uvicorn pydantic pydantic-settings langchain langchain-openai langchain-community langchain_huggingface chromadb sentence_transformers
+- Uvicorn (local): `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
+- Dockerfile entrypoint: Uvicorn command above
+- Docker Compose service: `rag-chatbot-api`
+  - Ports: `8000:8000`
+  - Volumes: `.:/app`, `./chroma_db:/app/chroma_db`
 
-### Lỗi kết nối
+Common commands:
+- Build and run: `docker compose up -d --build`
+- Stop: `docker compose down`
+- Logs: `docker compose logs -f rag-chatbot-api`
 
-- Kiểm tra `OPENAI_API_KEY` đã đúng chưa
-- Kiểm tra `OPENAI_BASE_URL` đã đúng chưa
-- Kiểm tra network có truy cập được endpoint không
-
-### Xem logs
-
-```bash
-docker compose logs -f rag-chatbot-api
-```
-
-## Cấu trúc project
+## Project Structure
 
 ```
-AI_ab/
-├── app/                  # Code chính
-├── documents/            # Thư mục tài liệu
-├── chroma_db/            # Database (tự động tạo)
-├── .env                  # File cấu hình (cần tạo)
-├── docker-compose.yml
-└── Dockerfile
+knowledge-base/
+├─ app/
+│  ├─ core/
+│  │  └─ config.py
+│  ├─ models/
+│  │  └─ schemas.py
+│  ├─ services/
+│  │  ├─ chat_service.py
+│  │  └─ document_service.py
+│  └─ main.py
+├─ chroma_db/              # Vector DB (created/populated at runtime)
+├─ documents/              # Place your source docs here
+├─ prompts/
+│  ├─ system_prompt.txt
+│  └─ rewrite_system_prompt.txt
+├─ .env                    # Your environment variables (not committed)
+├─ .env.example
+├─ requirements.txt
+├─ docker-compose.yml
+└─ Dockerfile
 ```
 
-## Lưu ý
+## Testing
 
-- Tài liệu được lưu trong ChromaDB vector database
-- Lịch sử chat lưu trong memory (sẽ mất khi restart)
-- Để production, nên thay memory storage bằng database
+- There are currently no automated tests in this repository. TODO: Add unit and integration tests for services and API endpoints.
+
+## Troubleshooting
+
+- Packages missing locally: ensure your venv is active and run `pip install -r requirements.txt`.
+- Connection issues:
+  - Verify `OPENAI_API_KEY` and `OPENAI_BASE_URL`
+  - Check network access to your endpoint
+- Reduce telemetry/noise in containers: the Dockerfile already sets env vars to disable Chroma and LangChain telemetry.
+
+## License
+
+TODO: Add a license file and specify the license here.
+
+## Acknowledgements
+
+- FastAPI, LangChain, ChromaDB, sentence-transformers, and related open-source projects.
