@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     default_max_tokens: int = Field(default=1000, alias="DEFAULT_MAX_TOKENS")
     max_conversation_length: int = Field(default=10, alias="MAX_CONVERSATION_LENGTH")
 
+    # Prompt Settings
+    # Path to the system prompt template file. The template may contain a `{context}` placeholder.
+    system_prompt_path: str = Field(default="./prompts/system_prompt.txt", alias="SYSTEM_PROMPT_PATH")
+    # Path to the query rewrite system prompt. No placeholders required.
+    rewrite_system_prompt_path: str = Field(default="./prompts/rewrite_system_prompt.txt", alias="REWRITE_SYSTEM_PROMPT_PATH")
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", env_file_encoding="utf-8")
 
 

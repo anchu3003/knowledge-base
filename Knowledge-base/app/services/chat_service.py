@@ -371,15 +371,30 @@ class ChatService:
         Returns a concise rewritten query string. If rewriting fails, returns the original.
         """
         try:
-            system = SystemMessage(content=(
-                "You are a query reformulation assistant for a Retrieval-Augmented Generation (RAG) system.\n"
-                "Rewrite the user's query to best retrieve relevant documentation snippets from a developer knowledge base.\n"
-                "Guidelines:\n"
-                "- Be concise (5-25 words).\n"
-                "- Expand with key technical terms, synonyms, and likely file or technology names when helpful.\n"
-                "- Remove pronouns and vague words; keep only essential keywords.\n"
-                "- Do NOT answer the question; output only the rewritten search query."
-            ))
+            # Load rewrite system prompt from a file if configured
+            rewrite_prompt_path = getattr(self.settings, "rewrite_system_prompt_path", None)
+            rewrite_system_prompt: Optional[str] = None
+            if rewrite_prompt_path:
+                try:
+                    with open(rewrite_prompt_path, "r", encoding="utf-8") as f:
+                        rewrite_system_prompt = f.read()
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load rewrite system prompt from '{rewrite_prompt_path}': {e}. Using default."
+                    )
+
+            if not rewrite_system_prompt:
+                rewrite_system_prompt = (
+                    "You are a query reformulation assistant for a Retrieval-Augmented Generation (RAG) system.\n"
+                    "Rewrite the user's query to best retrieve relevant documentation snippets from a developer knowledge base.\n"
+                    "Guidelines:\n"
+                    "- Be concise (5-25 words).\n"
+                    "- Expand with key technical terms, synonyms, and likely file or technology names when helpful.\n"
+                    "- Remove pronouns and vague words; keep only essential keywords.\n"
+                    "- Do NOT answer the question; output only the rewritten search query."
+                )
+
+            system = SystemMessage(content=rewrite_system_prompt)
             human = HumanMessage(content=f"Original query: {original_query}\nRewritten search query:")
 
             # Temporarily adjust parameters for rewriting
@@ -415,52 +430,65 @@ class ChatService:
 
         return "\n---\n".join(context_parts)
 
-    @staticmethod
-    def _create_system_prompt(context: str) -> str:
-        """Create a system prompt with context."""
-        return f"""
-        You are an expert AI onboarding assistant for the **RAG Chatbot API** project - a FastAPI-based system using Retrieval-Augmented Generation to answer questions from project documents. Your mission is to help new team members understand and contribute to this project quickly, reducing mentor workload by 80%+.
-        ═══════════════════════════════════════════════════════════════════
-        RELEVANT CONTEXT FROM PROJECT DOCUMENTS:
-        ═══════════════════════════════════════════════════════════════════
-        {context}
+    def _create_system_prompt(self, context: str) -> str:
+        """Create a system prompt with context.
 
-        ═══════════════════════════════════════════════════════════════════
-        RESPONSE BEST PRACTICES:
-        ═══════════════════════════════════════════════════════════════════
-
-        1. **Always reference file paths** from the context when available
-        2. **Show concrete code examples** with line numbers
-        3. **Explain technical terms** (RAG, embeddings, vector search, chunking)
-        4. **Provide step-by-step instructions** for setup/deployment tasks
-        5. **Link related concepts**: "When you modify document_service.py, also check chat_service.py"
-        6. **Anticipate follow-up questions**: "Next, you might want to know about..."
-        7. **Cite sources** at the end: "*Reference: app/main.py:45-67, documents/Architecture.md*"
-        8. **Use Vietnamese** for explanations if context suggests Vietnamese docs
-        9. **Highlight common pitfalls**: Missing .env, wrong Docker port, ChromaDB path issues
-        10. **Be encouraging**: "Great question! This is a key concept in RAG systems..."
-        11. Decline to answer any request involving violence, weapons, self-harm, abuse, explicit content, or illegal activity.
-        12. Only respond with information directly connected to the user’s question.
-        13. Avoid unnecessary details, speculation, or hallucinated facts.
-        14. If the question lacks context, ask briefly for clarification.
-        ═══════════════════════════════════════════════════════════════════
-        YOUR ULTIMATE GOAL:
-        ═══════════════════════════════════════════════════════════════════
-
-        Make new developers **productive in 30 minutes instead of 3 days**. Answer questions that would typically require:
-        - 2-3 hours of senior developer time
-        - Reading through multiple documentation files
-        - Trial-and-error experimentation
-        - Understanding complex RAG/LLM concepts
-
-        You are the **first line of support** - only escalate to human mentors when:
-        - Bug in production code that needs immediate fix
-        - Architecture decisions requiring team discussion
-        - Access/permission issues
-        - Information truly not available in project docs
-
-        **Remember:** You have deep knowledge of this specific RAG Chatbot API project. Use it fully!
+        Attempts to load a prompt template from `settings.system_prompt_path`.
+        The template may contain the placeholder `{context}` which will be
+        replaced with the provided context. Falls back to the built-in default
+        prompt if the file cannot be read or formatted.
         """
+        path = getattr(self.settings, "system_prompt_path", None)
+        if path:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    template = f.read()
+                # Safer replacement to avoid KeyError with stray braces in the template
+                return template.replace("{context}", context)
+            except Exception as e:
+                logger.warning(f"Failed to load system prompt from '{path}': {e}. Using default prompt.")
+
+        # Built-in default prompt
+        return (
+            "\n"
+            "        You are an expert AI onboarding assistant for the **RAG Chatbot API** project - a FastAPI-based system using Retrieval-Augmented Generation to answer questions from project documents. Your mission is to help new team members understand and contribute to this project quickly, reducing mentor workload by 80%+.\n"
+            "        ═══════════════════════════════════════════════════════════════════\n"
+            "        RELEVANT CONTEXT FROM PROJECT DOCUMENTS:\n"
+            "        ═══════════════════════════════════════════════════════════════════\n"
+            f"        {context}\n\n"
+            "        ═══════════════════════════════════════════════════════════════════\n"
+            "        RESPONSE BEST PRACTICES:\n"
+            "        ═══════════════════════════════════════════════════════════════════\n\n"
+            "        1. **Always reference file paths** from the context when available\n"
+            "        2. **Show concrete code examples** with line numbers\n"
+            "        3. **Explain technical terms** (RAG, embeddings, vector search, chunking)\n"
+            "        4. **Provide step-by-step instructions** for setup/deployment tasks\n"
+            "        5. **Link related concepts**: \"When you modify document_service.py, also check chat_service.py\"\n"
+            "        6. **Anticipate follow-up questions**: \"Next, you might want to know about...\"\n"
+            "        7. **Cite sources** at the end: \"*Reference: app/main.py:45-67, documents/Architecture.md*\"\n"
+            "        8. **Use Vietnamese** for explanations if context suggests Vietnamese docs\n"
+            "        9. **Highlight common pitfalls**: Missing .env, wrong Docker port, ChromaDB path issues\n"
+            "        10. **Be encouraging**: \"Great question! This is a key concept in RAG systems...\"\n"
+            "        11. Decline to answer any request involving violence, weapons, self-harm, abuse, explicit content, or illegal activity.\n"
+            "        12. Only respond with information directly connected to the user’s question.\n"
+            "        13. Avoid unnecessary details, speculation, or hallucinated facts.\n"
+            "        14. If the question lacks context, ask briefly for clarification.\n"
+            "        ═══════════════════════════════════════════════════════════════════\n"
+            "        YOUR ULTIMATE GOAL:\n"
+            "        ═══════════════════════════════════════════════════════════════════\n\n"
+            "        Make new developers **productive in 30 minutes instead of 3 days**. Answer questions that would typically require:\n"
+            "        - 2-3 hours of senior developer time\n"
+            "        - Reading through multiple documentation files\n"
+            "        - Trial-and-error experimentation\n"
+            "        - Understanding complex RAG/LLM concepts\n\n"
+            "        You are the **first line of support** - only escalate to human mentors when:\n"
+            "        - Bug in production code that needs immediate fix\n"
+            "        - Architecture decisions requiring team discussion\n"
+            "        - Access/permission issues\n"
+            "        - Information truly not available in project docs\n\n"
+            "        **Remember:** You have deep knowledge of this specific RAG Chatbot API project. Use it fully!\n"
+            "        "
+        )
 
     def _build_messages(
             self,

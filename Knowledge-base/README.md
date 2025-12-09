@@ -91,6 +91,54 @@ RETRIEVAL_K=5
 DEFAULT_TEMPERATURE=0.7
 ```
 
+### Cấu hình prompt hệ thống (system prompt)
+
+Bạn có thể cấu hình nội dung system prompt từ file thay vì hard-code trong mã nguồn.
+
+1) Tạo thư mục chứa prompt:
+
+```
+prompts/
+```
+
+2) Tạo file `prompts/system_prompt.txt` với nội dung template. Sử dụng placeholder `{context}` để chèn phần ngữ cảnh tài liệu đã truy hồi:
+
+```
+Bạn là trợ lý onboarding cho dự án RAG Chatbot API.\n
+══════════════════════════════════════════
+NGỮ CẢNH LIÊN QUAN TỪ TÀI LIỆU:
+══════════════════════════════════════════
+{context}
+
+Hướng dẫn trả lời:
+- Trả lời ngắn gọn, có trích dẫn file/đường dẫn khi có thể
+- Giải thích các thuật ngữ kỹ thuật khi cần
+```
+
+3) (Tuỳ chọn) Tạo file `prompts/rewrite_system_prompt.txt` để cấu hình prompt dành cho bước "viết lại truy vấn" (query rewrite). File này không cần placeholder:
+
+```
+You are a query reformulation assistant for a RAG system.
+Rewrite the user's query to better retrieve relevant documentation.
+Guidelines:
+- Be concise (5-25 words).
+- Expand with key technical terms when helpful.
+- Do NOT answer; output only the rewritten query.
+```
+
+4) Khai báo đường dẫn trong `.env`:
+
+```env
+# Prompt Settings
+SYSTEM_PROMPT_PATH=./prompts/system_prompt.txt
+# Tuỳ chọn cho bước rewrite:
+REWRITE_SYSTEM_PROMPT_PATH=./prompts/rewrite_system_prompt.txt
+```
+
+Ghi chú:
+- Ứng dụng sẽ ưu tiên đọc prompt từ các file trên. Nếu file không tồn tại hoặc lỗi đọc, ứng dụng sẽ dùng prompt mặc định tích hợp sẵn.
+- Docker đã mount toàn bộ project vào container (`.:/app`), nên chỉ cần đảm bảo các file trong thư mục `prompts/` tồn tại cùng cấp với dự án.
+
 ## Xử lý lỗi
 
 ### Lỗi không tìm thấy package ở local
