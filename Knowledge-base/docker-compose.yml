@@ -1,9 +1,9 @@
 version: "3.9"
 
 services:
-  rag-chatbot-api:
+  chatbot-api:
     build: .
-    container_name: rag-chatbot-api
+    container_name: chatbot-api
     env_file: .env
     ports:
       - "8000:8000"
@@ -12,3 +12,12 @@ services:
       - .:/app
       - ./chroma_db:/app/chroma_db
     restart: unless-stopped
+
+  chatbot-ui:
+     build: ../knowledge-base-fe/
+     container_name: chatbot-ui
+     ports:
+       - "3000:3000"
+     volumes:
+       - ../knowledge-base-fe/:/app
+     restart: unless-stopped

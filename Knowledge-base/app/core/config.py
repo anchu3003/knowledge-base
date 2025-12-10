@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # OpenAI Settings
     openai_api_key: SecretStr = SecretStr(Field(..., alias="OPENAI_API_KEY"))
-    openai_base_url: str | None = Field(..., alias="OPENAI_BASE_URL")
+    openai_base_url: str = Field(..., alias="OPENAI_BASE_URL")
     openai_model: str = Field(default="gpt-3.5-turbo", alias="OPENAI_MODEL")
     openai_embedding_model: str = Field(default="text-embedding-ada-002", alias="OPENAI_EMBEDDING_MODEL")
     openai_api_type: str = Field(default="openai", alias="OPENAI_API_TYPE")
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     )
 
     # Document folder settings
-    documents_folder: str = Field(default="./documents", alias="DOCUMENTS_FOLDER")
+    documents_folder: str = Field(default="Interview", alias="DOCUMENTS_FOLDER")
     auto_load_on_startup: bool = Field(default=True, alias="AUTO_LOAD_ON_STARTUP")
 
     # RAG Settings
@@ -84,7 +84,7 @@ def get_settings() -> Settings:
     """Get application settings (singleton pattern)"""
     global _settings
     if _settings is None:
-        _settings = Settings(OPENAI_BASE_URL="")
+        _settings = Settings(OPENAI_BASE_URL="https://aiportalapi.stu-platform.live/jpe")
     return _settings
 
 

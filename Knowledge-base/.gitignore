@@ -54,3 +54,5 @@ docker-compose.override.yml
 *.bak
 *.tmp
 *.temp
+.gitignore
+Todo.txt

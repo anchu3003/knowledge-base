@@ -1,5 +1,4 @@
 import logging
-import os
 import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Optional, AsyncIterator
@@ -11,10 +10,6 @@ from openai import APIError, APIConnectionError, AuthenticationError, RateLimitE
 
 from app.core.config import Settings
 from app.services.document_service import DocumentService
-
-os.environ["LANGCHAIN_TRACING_V2"] = "false"
-os.environ["LANGCHAIN_TELEMETRY"] = "false"
-os.environ["LANGCHAIN_ENDPOINT"] = ""
 
 logger = logging.getLogger(__name__)
 

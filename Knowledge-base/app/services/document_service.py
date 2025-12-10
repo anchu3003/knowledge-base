@@ -1,17 +1,12 @@
 import asyncio
 import importlib
 import logging
-import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Any as TypingAny, Mapping
 
 import chromadb
 from chromadb import SparseVector
-
-# Suppress ChromaDB telemetry warnings
-warnings.filterwarnings("ignore", category=UserWarning, message=".*telemetry.*")
-warnings.filterwarnings("ignore", category=UserWarning, message=".*capture.*")
 
 from chromadb.config import Settings as ChromaSettings
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
@@ -49,7 +44,7 @@ class DocumentService:
         # Get or create a collection
         try:
             self.collection = self.chroma_client.get_collection(settings.collection_name)
-        except ValueError:
+        except Exception:
             self.collection = self.chroma_client.create_collection(
                 name=settings.collection_name,
                 metadata={"description": "RAG documents collection"}
