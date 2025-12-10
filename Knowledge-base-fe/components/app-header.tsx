@@ -1,14 +1,18 @@
 'use client';
 
-import { useAuth } from '@/lib/auth-context';
 import { RoleBadge } from './role-badge';
 import { Button } from '@/components/ui/button';
 import { LogOut, Menu } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
+export type UserRole = "admin" | "developer" | "document_manager"
+
 export function AppHeader() {
-  const { user, logout } = useAuth();
+  const user : { name: string, role: UserRole } | null = {
+      name: 'anonymous',
+      role: 'developer'
+  }
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const getNavItems = () => {
@@ -77,7 +81,7 @@ export function AppHeader() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => logout()}
+                  onClick={() => ""}
                   className="gap-2"
                 >
                   <LogOut className="h-4 w-4" />

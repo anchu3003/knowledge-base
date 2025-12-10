@@ -1,10 +1,5 @@
-step 1: npm install
-step 2: create .evn :
-OPENAI_API_KEY=sk-OPENAI_API_KEY
-OPENAI_CHAT_URL=OPENAI_CHAT_URL
-ALLOWED_ORIGINS=http://localhost:3000
-NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000
-step3 : npm run dev
+step 1: npm install --force or --legacy-peer-deps
+step 2: npm run dev
 
 ## Quick start (developer)
 
