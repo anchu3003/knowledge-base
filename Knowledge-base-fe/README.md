@@ -4,6 +4,7 @@ step 2: npm run dev
 ## Quick start (developer)
 
 Prerequisites:
+
 - Node.js (16+), npm or pnpm
 - Python 3.10+ and virtualenv (recommended)
 

@@ -46,4 +46,4 @@ COPY --chown=node:node next.config.mjs ./next.config.mjs
 EXPOSE 3000
 
 # Start Next.js in production mode
-CMD ["npm", "run", "start"]
+CMD ["node_modules/.bin/next", "start", "-p", "3000"]
