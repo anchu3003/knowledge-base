@@ -47,7 +47,7 @@ export function MessageWithCitations({
             .replaceAll("'", '&#039;');
 
     const linkify = (text: string) => {
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const urlRegex = /(https?:\/\/\S+)/g;
         return text.replace(
             urlRegex,
             (url) =>

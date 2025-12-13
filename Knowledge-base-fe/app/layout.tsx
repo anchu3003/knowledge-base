@@ -3,8 +3,8 @@ import type {Metadata} from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-    title: 'OnboardAI - AI Onboarding Assistant',
-    description: 'Intelligent document processing and AI-powered onboarding',
+    title: 'Personal Knowledge Base',
+    description: 'Intelligent document processing and AI-powered knowledge base for personal use.',
     generator: 'v0.app',
 };
 
@@ -15,9 +15,9 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en">
-            <body>
-                {children}
-            </body>
+        <body>
+        {children}
+        </body>
         </html>
     );
 }

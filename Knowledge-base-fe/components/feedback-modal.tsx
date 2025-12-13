@@ -73,7 +73,7 @@ export function FeedbackModal({onSubmit, isLoading = false}: FeedbackModalProps)
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                             <div>
                                 <CardTitle>Send Feedback</CardTitle>
-                                <CardDescription>Help us improve OnboardAI</CardDescription>
+                                <CardDescription>Help us find and review our information</CardDescription>
                             </div>
                             <button
                                 onClick={() => setIsOpen(false)}
@@ -128,7 +128,8 @@ export function FeedbackModal({onSubmit, isLoading = false}: FeedbackModalProps)
                                     </div>
 
                                     {/* Submit Button */}
-                                    <Button type="submit" className="w-full" disabled={!message.trim() || isSubmitting || isLoading}>
+                                    <Button type="submit" className="w-full"
+                                            disabled={!message.trim() || isSubmitting || isLoading}>
                                         {isSubmitting ? "Sending..." : "Send Feedback"}
                                     </Button>
                                 </form>

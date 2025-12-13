@@ -4,7 +4,6 @@ import {useEffect, useRef, useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {AppHeader} from '@/components/app-header';
-import {FeedbackModal} from '@/components/feedback-modal';
 import {MessageWithCitations} from '@/components/message-with-citations';
 import {ChatHistorySidebar} from '@/components/chat-history-sidebar';
 import type {Feedback} from '@/lib/types';
@@ -144,7 +143,6 @@ export default function ChatPage() {
             if (!resp.ok) {
                 const text = await resp.text();
                 console.error('Proxy returned non-OK:', resp.status, text);
-                throw new Error(`Proxy error: ${resp.status}`);
             }
 
             const data = await resp.json();
@@ -249,15 +247,11 @@ export default function ChatPage() {
         feedback: Omit<Feedback, 'id' | 'createdAt'>
     ) => {
         try {
-            const response = await fetch('/api/feedback/submit', {
+            await fetch('/api/feedback/submit', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(feedback),
             });
-
-            if (!response.ok) {
-                throw new Error('Failed to submit feedback');
-            }
         } catch (error) {
             console.error('Error submitting feedback:', error);
             throw error;
@@ -375,7 +369,8 @@ export default function ChatPage() {
                                                                         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                                                                             {source.file_name}
                                                                         </h4>
-                                                                        <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
+                                                                        <span
+                                                                            className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
                                                                             {source.file_type}
                                                                         </span>
                                                                     </div>
@@ -398,7 +393,8 @@ export default function ChatPage() {
                                                                                 fill="currentColor"
                                                                                 viewBox="0 0 20 20"
                                                                             >
-                                                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                                                                <path
+                                                                                    d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                                                                             </svg>
                                                                             <span
                                                                                 className="text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -431,18 +427,25 @@ export default function ChatPage() {
                             {isLoading && (
                                 <div
                                     className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <div className="hidden md:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/20 to-purple-500/20 shadow-sm">
-                                        <div className="h-5 w-5 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 animate-pulse"/>
+                                    <div
+                                        className="hidden md:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/20 to-purple-500/20 shadow-sm">
+                                        <div
+                                            className="h-5 w-5 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 animate-pulse"/>
                                     </div>
                                     <div className="max-w-[85%]">
-                                        <div className="inline-block rounded-2xl px-5 py-3.5 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 shadow-md">
+                                        <div
+                                            className="inline-block rounded-2xl px-5 py-3.5 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 shadow-md">
                                             <div className="flex items-center gap-2">
                                                 <div className="flex gap-1">
-                                                    <span className="h-2 w-2 rounded-full bg-violet-500 animate-bounce [animation-delay:-0.3s]"></span>
-                                                    <span className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]"></span>
-                                                    <span className="h-2 w-2 rounded-full bg-purple-500 animate-bounce"></span>
+                                                    <span
+                                                        className="h-2 w-2 rounded-full bg-violet-500 animate-bounce [animation-delay:-0.3s]"></span>
+                                                    <span
+                                                        className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]"></span>
+                                                    <span
+                                                        className="h-2 w-2 rounded-full bg-purple-500 animate-bounce"></span>
                                                 </div>
-                                                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                                <span
+                                                    className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                                                     AI is thinking...
                                                 </span>
                                             </div>
@@ -472,7 +475,9 @@ export default function ChatPage() {
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter' && !e.shiftKey) {
                                                     e.preventDefault();
-                                                    if (!isLoading && input.trim()) handleSendMessage();
+                                                    if (!isLoading && input.trim()) {
+                                                        handleSendMessage();
+                                                    }
                                                 }
                                             }}
                                             disabled={isLoading}
@@ -493,8 +498,8 @@ export default function ChatPage() {
                                         size="lg"
                                         className="self-center px-8 py-6 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg"
                                     >
-                                    {isLoading ? (
-                                        <span className="flex items-center gap-2">
+                                        {isLoading ? (
+                                            <span className="flex items-center gap-2">
                                             <svg
                                                 className="animate-spin h-4 w-4"
                                                 xmlns="http://www.w3.org/2000/svg"
@@ -530,9 +535,9 @@ export default function ChatPage() {
                                     >
                                         {showAdvanced ? 'Hide options' : 'Advanced options'}
                                     </Button>
-                                    <div className="text-xs text-muted-foreground">
-                                        Tip: Upload documents for better answers.
-                                    </div>
+                                    {/*<div className="text-xs text-muted-foreground">*/}
+                                    {/*    Tip: Upload documents for better answers.*/}
+                                    {/*</div>*/}
                                 </div>
 
                                 {formError && (
@@ -609,7 +614,7 @@ export default function ChatPage() {
             </div>
 
             {/* Feedback Modal */}
-            <FeedbackModal onSubmit={handleFeedbackSubmit}/>
+            {/*<FeedbackModal onSubmit={handleFeedbackSubmit}/>*/}
         </div>
     );
 }

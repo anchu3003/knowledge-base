@@ -72,10 +72,10 @@ Request JSON (example):
 
 ```json
 {
-	"message": "Kho dữ liệu về chủ đề gì?",
-	"conversation_id": "string",
-	"max_tokens": 1000,
-	"temperature": 0.7
+  "message": "Kho dữ liệu về chủ đề gì?",
+  "conversation_id": "string",
+  "max_tokens": 1000,
+  "temperature": 0.7
 }
 ```
 

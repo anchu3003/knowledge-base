@@ -2,38 +2,62 @@
 
 import {RoleBadge} from './role-badge';
 import {Button} from '@/components/ui/button';
-import {LogOut, Menu} from 'lucide-react';
+import {LogOut} from 'lucide-react';
 import Link from 'next/link';
-import {useState} from 'react';
 
-export type UserRole = "admin" | "developer" | "document_manager"
+export type UserRole = "admin" | "developer"
+
 
 export function AppHeader() {
     const user: { name: string, role: UserRole } | null = {
-        name: 'anonymous',
+        name: 'An Chu',
         role: 'developer'
     }
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const getNavItems = () => {
-        // if (!user) return [];
-        //
-        // const baseItems = [
-        //     {label: 'Chat', href: '/chat'},
-        //     {label: 'Knowledge Base', href: '/knowledge-base'},
-        // ];
-        //
+        if (!user) return [];
+
+        const baseItems = [
+            {label: 'Info', href: 'http://localhost:8000/documents/folder-info'},
+            {label: 'Refresh', href: 'http://localhost:8000/documents/refresh'},
+            {label: 'Clear', href: 'http://localhost:8000/documents/clear'},
+        ];
         // if (user.role === 'admin') {
         //     return [
         //         ...baseItems,
-        //         {label: 'Analytics', href: '/analytics'},
-        //         {label: 'Users', href: '/admin/users'},
         //         {label: 'Settings', href: '/settings'},
         //     ];
         // }
-        //
-        // return [...baseItems, {label: 'Settings', href: '/settings'}];
-        return [];
+        return [...baseItems];
+    };
+
+    const handleClickMenu = async (
+        label: string
+    ) => {
+        let link = "";
+        let method = "GET";
+        switch (label) {
+            case 'Info':
+                link = "http://localhost:8000/documents/folder-info";
+                break;
+            case 'Refresh':
+                link = "http://localhost:8000/documents/refresh";
+                method = "POST";
+                break;
+            case 'Clear':
+                link = "http://localhost:8000/documents/clear";
+                method = "DELETE";
+                break;
+        }
+        try {
+            await fetch(link, {
+                method: method,
+                headers: {'Content-Type': 'application/json'}
+            });
+        } catch (error) {
+            console.error('Error submitting request:', error);
+            throw error;
+        }
     };
 
     const navItems = getNavItems();
@@ -47,17 +71,17 @@ export function AppHeader() {
                         <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                             <span className="text-primary-foreground font-bold text-lg"> O </span>
                         </div>
-                        <span className="font-bold text-lg hidden sm:inline"> OnboardAI </span>
+                        <span className="font-bold text-lg hidden sm:inline"> Knowledge Navigator </span>
                     </Link>
 
                     {/* Desktop Navigation */}
-                    <nav className="hidden md:flex items-center gap-1">
-                        {/*{navItems.map((item) => (*/}
-                        {/*    <Link key={item.href} href={item.href} */}
-                        {/*          className="px-3 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-md transition-colors"> */}
-                        {/*        {item.label}*/}
-                        {/*    </Link>*/}
-                        {/*))}*/}
+                    <nav className="hidden md:flex items-left gap-1">
+                        {navItems.map((item) => (
+                            <Link key={item.label} onClick={() => handleClickMenu(item.label)} href={"/"}
+                                  className="px-3 py-2 text-sm font-medium hover:bg-muted rounded-md">
+                                {item.label}
+                            </Link>
+                        ))}
                     </nav>
 
                     {/* User Info & Logout */}
@@ -66,7 +90,7 @@ export function AppHeader() {
                             <>
                                 <div className="hidden sm:flex items-center gap-2 flex-row">
                                     <div className="text-right flex-row flex gap-2">
-                                        <p className="text-sm font-medium text-foreground"> user.name</p>
+                                        <p className="text-sm font-medium text-foreground">{user.name}</p>
                                         <RoleBadge role={user.role} size="sm"/>
                                     </div>
                                 </div>
@@ -76,31 +100,8 @@ export function AppHeader() {
                                 </Button>
                             </>
                         )}
-
-                        {/* Mobile Menu Button */}
-                        <button
-                            className="md:hidden p-2 hover:bg-muted rounded-md"
-                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                        >
-                            <Menu className="h-5 w-5"/>
-                        </button>
                     </div>
                 </div>
-
-                {/* Mobile Navigation */}
-                {mobileMenuOpen && (
-                    <nav className="md:hidden pb-4 space-y-1">
-                        {/*{navItems.map((item) => (*/}
-                        {/*    <Link*/}
-                        {/*        key={item.href}*/}
-                        {/*        href={item.href}*/}
-                        {/*        className="block px-3 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-md transition-colors"*/}
-                        {/*    >*/}
-                        {/*        {item.label}*/}
-                        {/*    </Link>*/}
-                        {/*))}*/}
-                    </nav>
-                )}
             </div>
         </header>
     );

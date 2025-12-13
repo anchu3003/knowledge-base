@@ -44,7 +44,7 @@ export function exportToPDF(content: string, filename: string) {
 
 export function generateAnalyticsReport(data: any): string {
     return `
-OnboardAI Analytics Report
+Knowledge-base Report
 Generated: ${new Date().toLocaleString()}
 
 Summary:
