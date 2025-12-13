@@ -19,9 +19,8 @@ export function RoleBadge({role, size = "md"}: RoleBadgeProps) {
     }
 
     return (
-        <span
-            className={`inline-flex items-center rounded-full font-medium text-white ${colorClass} ${sizeClasses[size]}`}>
-      {displayName}
-    </span>
+        <span className={`inline-flex items-center rounded-full font-medium text-white ${colorClass} ${sizeClasses[size]}`}>
+            {displayName}
+        </span>
     )
 }

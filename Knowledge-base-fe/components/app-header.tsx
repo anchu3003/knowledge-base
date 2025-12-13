@@ -16,23 +16,24 @@ export function AppHeader() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const getNavItems = () => {
-        if (!user) return [];
-
-        const baseItems = [
-            {label: 'Chat', href: '/chat'},
-            {label: 'Knowledge Base', href: '/knowledge-base'},
-        ];
-
-        if (user.role === 'admin') {
-            return [
-                ...baseItems,
-                {label: 'Analytics', href: '/analytics'},
-                {label: 'Users', href: '/admin/users'},
-                {label: 'Settings', href: '/settings'},
-            ];
-        }
-
-        return [...baseItems, {label: 'Settings', href: '/settings'}];
+        // if (!user) return [];
+        //
+        // const baseItems = [
+        //     {label: 'Chat', href: '/chat'},
+        //     {label: 'Knowledge Base', href: '/knowledge-base'},
+        // ];
+        //
+        // if (user.role === 'admin') {
+        //     return [
+        //         ...baseItems,
+        //         {label: 'Analytics', href: '/analytics'},
+        //         {label: 'Users', href: '/admin/users'},
+        //         {label: 'Settings', href: '/settings'},
+        //     ];
+        // }
+        //
+        // return [...baseItems, {label: 'Settings', href: '/settings'}];
+        return [];
     };
 
     const navItems = getNavItems();
@@ -44,26 +45,19 @@ export function AppHeader() {
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">
-                O
-              </span>
+                            <span className="text-primary-foreground font-bold text-lg"> O </span>
                         </div>
-                        <span className="font-bold text-lg hidden sm:inline">
-              OnboardAI
-            </span>
+                        <span className="font-bold text-lg hidden sm:inline"> OnboardAI </span>
                     </Link>
 
                     {/* Desktop Navigation */}
                     <nav className="hidden md:flex items-center gap-1">
-                        {navItems.map((item) => (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className="px-3 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-md transition-colors"
-                            >
-                                {item.label}
-                            </Link>
-                        ))}
+                        {/*{navItems.map((item) => (*/}
+                        {/*    <Link key={item.href} href={item.href} */}
+                        {/*          className="px-3 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-md transition-colors"> */}
+                        {/*        {item.label}*/}
+                        {/*    </Link>*/}
+                        {/*))}*/}
                     </nav>
 
                     {/* User Info & Logout */}
@@ -72,18 +66,11 @@ export function AppHeader() {
                             <>
                                 <div className="hidden sm:flex items-center gap-2 flex-row">
                                     <div className="text-right flex-row flex gap-2">
-                                        <p className="text-sm font-medium text-foreground">
-                                            {user.name}
-                                        </p>
+                                        <p className="text-sm font-medium text-foreground"> user.name</p>
                                         <RoleBadge role={user.role} size="sm"/>
                                     </div>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => ""}
-                                    className="gap-2"
-                                >
+                                <Button variant="ghost" size="sm" onClick={() => ""} className="gap-2">
                                     <LogOut className="h-4 w-4"/>
                                     <span className="hidden sm:inline">Logout</span>
                                 </Button>
@@ -103,15 +90,15 @@ export function AppHeader() {
                 {/* Mobile Navigation */}
                 {mobileMenuOpen && (
                     <nav className="md:hidden pb-4 space-y-1">
-                        {navItems.map((item) => (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className="block px-3 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-md transition-colors"
-                            >
-                                {item.label}
-                            </Link>
-                        ))}
+                        {/*{navItems.map((item) => (*/}
+                        {/*    <Link*/}
+                        {/*        key={item.href}*/}
+                        {/*        href={item.href}*/}
+                        {/*        className="block px-3 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-md transition-colors"*/}
+                        {/*    >*/}
+                        {/*        {item.label}*/}
+                        {/*    </Link>*/}
+                        {/*))}*/}
                     </nav>
                 )}
             </div>

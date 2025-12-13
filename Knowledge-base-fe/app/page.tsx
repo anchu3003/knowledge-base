@@ -49,7 +49,7 @@ export default function ChatPage() {
             id: 'session_1',
             title: 'Getting Started',
             createdAt: new Date(Date.now() - 86400000),
-            messageCount: 3,
+            messageCount: 1,
         },
     ]);
     const [currentSessionId, setCurrentSessionId] = useState('session_1');
@@ -60,35 +60,7 @@ export default function ChatPage() {
                 role: 'assistant',
                 content:
                     "Hello! I'm your AI assistant. Upload a document to get started, or ask me anything about your documents.",
-            },
-            {
-                id: '2',
-                role: 'user',
-                content: 'How do I install ChromaDB?',
-            },
-            {
-                id: '3',
-                role: 'assistant',
-                content:
-                    'To install ChromaDB based on the provided documents, you can follow these instructions:\n\n1. **Basic Installation**: You can add ChromaDB to your project by including it in your `requirements.txt` file using the following line:\n   ```\n   chromadb>=0.4.0\n   ```\n\n2. **Optional Server Integration**: If you want to install the server integration, you can run the following command:\n   ```\n   pip install "chromadb[server]"\n   ```\n\nThese steps will set up ChromaDB for use in your project. You can refer to Document 2 for these installation details.',
-                sources: [
-                    {
-                        file_path: 'documents/Architecture.md',
-                        file_name: 'Architecture.md',
-                        file_type: '.md',
-                        relevance_score: -0.287,
-                        content_preview:
-                            '## 🔄 Quy Trình Hoạt Động Chi Tiết\n\n### Phase 1: Khởi Động & Load Documents\n\n```mermaid\ngraph TD\n    A[Start Application] --> B[Load .env Config]\n    B --> C[Initialize Services]\n    C --> D{AUTO_LOAD_...',
-                    },
-                ],
-                metadata: {
-                    retrieved_documents: 5,
-                    timestamp: '2025-11-14T14:20:43.480580',
-                    model: 'GPT-4o-mini',
-                    temperature: 0.7,
-                    max_tokens: 500,
-                },
-            },
+            }
         ],
     });
     const [messages, setMessages] = useState<Message[]>(chatHistory.session_1);
@@ -96,9 +68,7 @@ export default function ChatPage() {
     const [model, setModel] = useState('gpt-4o-mini');
     const [maxTokens, setMaxTokens] = useState<number>(500);
     const [temperature, setTemperature] = useState<number>(0.7);
-    const [systemPrompt, setSystemPrompt] = useState<string>(
-        'You are a helpful assistant.'
-    );
+    const [systemPrompt, setSystemPrompt] = useState<string>();
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -405,10 +375,9 @@ export default function ChatPage() {
                                                                         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                                                                             {source.file_name}
                                                                         </h4>
-                                                                        <span
-                                                                            className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
-                                        {source.file_type}
-                                      </span>
+                                                                        <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
+                                                                            {source.file_type}
+                                                                        </span>
                                                                     </div>
 
                                                                     {/* File Path */}
@@ -417,9 +386,9 @@ export default function ChatPage() {
                                                                     </p>
 
                                                                     {/* Content Preview */}
-                                                                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">
-                                                                        {source.content_preview}
-                                                                    </p>
+                                                                    {/*<p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">*/}
+                                                                    {/*    {source.content_preview}*/}
+                                                                    {/*</p>*/}
 
                                                                     {/* Relevance Score */}
                                                                     <div className="flex items-center gap-2">
@@ -429,16 +398,15 @@ export default function ChatPage() {
                                                                                 fill="currentColor"
                                                                                 viewBox="0 0 20 20"
                                                                             >
-                                                                                <path
-                                                                                    d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                                                                             </svg>
                                                                             <span
                                                                                 className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                                          Relevance:{' '}
+                                                                                Relevance:{' '}
                                                                                 {Math.abs(
                                                                                     source.relevance_score
                                                                                 ).toFixed(3)}
-                                        </span>
+                                                                            </span>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -446,26 +414,6 @@ export default function ChatPage() {
                                                         </div>
                                                     ))}
                                                 </div>
-
-                                                {/* Metadata
-                          {message.metadata && (
-                            <div className="mt-3 px-3 py-2 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                <span className="flex items-center gap-1">
-                                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                                  </svg>
-                                  <span className="font-medium">{message.metadata.model}</span>
-                                </span>
-                                <span>•</span>
-                                <span>{message.metadata.retrieved_documents} docs</span>
-                                <span>•</span>
-                                <span>Temp: {message.metadata.temperature}</span>
-                                <span>•</span>
-                                <span>Max tokens: {message.metadata.max_tokens}</span>
-                              </div>
-                            </div>
-                          )} */}
                                             </div>
                                         )}
                                     </div>
@@ -483,27 +431,20 @@ export default function ChatPage() {
                             {isLoading && (
                                 <div
                                     className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <div
-                                        className="hidden md:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/20 to-purple-500/20 shadow-sm">
-                                        <div
-                                            className="h-5 w-5 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 animate-pulse"/>
+                                    <div className="hidden md:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/20 to-purple-500/20 shadow-sm">
+                                        <div className="h-5 w-5 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 animate-pulse"/>
                                     </div>
                                     <div className="max-w-[85%]">
-                                        <div
-                                            className="inline-block rounded-2xl px-5 py-3.5 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 shadow-md">
+                                        <div className="inline-block rounded-2xl px-5 py-3.5 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 shadow-md">
                                             <div className="flex items-center gap-2">
                                                 <div className="flex gap-1">
-                                                    <span
-                                                        className="h-2 w-2 rounded-full bg-violet-500 animate-bounce [animation-delay:-0.3s]"></span>
-                                                    <span
-                                                        className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]"></span>
-                                                    <span
-                                                        className="h-2 w-2 rounded-full bg-purple-500 animate-bounce"></span>
+                                                    <span className="h-2 w-2 rounded-full bg-violet-500 animate-bounce [animation-delay:-0.3s]"></span>
+                                                    <span className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]"></span>
+                                                    <span className="h-2 w-2 rounded-full bg-purple-500 animate-bounce"></span>
                                                 </div>
-                                                <span
-                                                    className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                            AI is thinking...
-                          </span>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                                    AI is thinking...
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
@@ -536,7 +477,7 @@ export default function ChatPage() {
                                             }}
                                             disabled={isLoading}
                                             rows={3}
-                                            className="w-full min-h-[60px] max-h-[200px] resize-y rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-5 py-3.5 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
+                                            className="w-full min-h-[30px] max-h-[100px] resize-y rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-5 py-3.5 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
                                         />
                                         {isLoading && (
                                             <div
@@ -550,32 +491,32 @@ export default function ChatPage() {
                                         onClick={handleSendMessage}
                                         disabled={!input.trim() || isLoading}
                                         size="lg"
-                                        className="px-8 py-6 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg"
+                                        className="self-center px-8 py-6 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg"
                                     >
-                                        {isLoading ? (
-                                            <span className="flex items-center gap-2">
-                          <svg
-                              className="animate-spin h-4 w-4"
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                          >
-                            <circle
-                                className="opacity-25"
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                            ></circle>
-                            <path
-                                className="opacity-75"
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          Sending
-                        </span>
+                                    {isLoading ? (
+                                        <span className="flex items-center gap-2">
+                                            <svg
+                                                className="animate-spin h-4 w-4"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                            >
+                                        <circle
+                                            className="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                        ></circle>
+                                        <path
+                                            className="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                        ></path>
+                                            </svg>
+                                            Sending
+                                        </span>
                                         ) : (
                                             'Send'
                                         )}
@@ -584,8 +525,8 @@ export default function ChatPage() {
 
                                 <div className="flex items-center justify-between mt-2">
                                     <Button
-                                        variant="ghost"
                                         onClick={() => setShowAdvanced((s) => !s)}
+                                        className="from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
                                     >
                                         {showAdvanced ? 'Hide options' : 'Advanced options'}
                                     </Button>

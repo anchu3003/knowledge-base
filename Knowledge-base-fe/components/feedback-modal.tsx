@@ -128,8 +128,7 @@ export function FeedbackModal({onSubmit, isLoading = false}: FeedbackModalProps)
                                     </div>
 
                                     {/* Submit Button */}
-                                    <Button type="submit" className="w-full"
-                                            disabled={!message.trim() || isSubmitting || isLoading}>
+                                    <Button type="submit" className="w-full" disabled={!message.trim() || isSubmitting || isLoading}>
                                         {isSubmitting ? "Sending..." : "Send Feedback"}
                                     </Button>
                                 </form>

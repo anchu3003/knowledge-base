@@ -105,8 +105,8 @@ export function MessageWithCitations({
                     >
                         <Copy className="h-4 w-4"/>
                         <span className="text-xs text-muted-foreground">
-              {copied ? 'Copied' : 'Copy'}
-            </span>
+                            {copied ? 'Copied' : 'Copy'}
+                        </span>
                     </button>
                 )}
 
@@ -143,8 +143,8 @@ export function MessageWithCitations({
                                                 </p>
                                                 <span
                                                     className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono">
-                          {source.file_type}
-                        </span>
+                                                    {source.file_type}
+                                                 </span>
                                             </div>
                                             <p
                                                 className="text-xs text-muted-foreground truncate mb-2"
@@ -163,8 +163,8 @@ export function MessageWithCitations({
                                                 </div>
                                                 <span
                                                     className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                          {(source.relevance_score * 100).toFixed(1)}%
-                        </span>
+                                                    {(source.relevance_score * 100).toFixed(1)}%
+                                                </span>
                                             </div>
                                             {source.content_preview && (
                                                 <details className="mt-2 text-xs">
@@ -174,8 +174,8 @@ export function MessageWithCitations({
                                                     </summary>
                                                     <pre
                                                         className="mt-1 p-2 rounded bg-muted text-xs whitespace-pre-wrap break-words">
-                            {source.content_preview}
-                          </pre>
+                                                        {source.content_preview}
+                                                    </pre>
                                                 </details>
                                             )}
                                         </div>
@@ -214,8 +214,8 @@ export function MessageWithCitations({
                                                     />
                                                 </div>
                                                 <span className="text-xs text-muted-foreground">
-                          {Math.round(citation.relevance * 100)}%
-                        </span>
+                                                    {Math.round(citation.relevance * 100)}%
+                                                </span>
                                             </div>
                                         </div>
                                         <a
