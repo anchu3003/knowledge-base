@@ -71,7 +71,8 @@ class Settings(BaseSettings):
     rewrite_system_prompt_path: str = Field(default="./prompts/rewrite_system_prompt.txt",
                                             alias="REWRITE_SYSTEM_PROMPT_PATH")
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="", env_file_encoding="utf-8")
+    # local only
+    # model_config = SettingsConfigDict(env_file=".env", env_prefix="", env_file_encoding="utf-8")
 
 
 # ---------------------------
