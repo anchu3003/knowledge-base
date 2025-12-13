@@ -1,3 +1,4 @@
+import json
 import logging
 import warnings
 from contextlib import asynccontextmanager
@@ -7,7 +8,6 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-import json
 
 # Suppress ChromaDB telemetry warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*telemetry.*")
@@ -266,12 +266,13 @@ async def chat_stream(
 
     Each event is a JSON object with a `type` field among: start, token, end, error.
     """
+
     async def event_generator():
         async for event in service.stream_chat(
-            message=request.message,
-            conversation_id=request.conversation_id,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
+                message=request.message,
+                conversation_id=request.conversation_id,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
         ):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 

@@ -7,17 +7,16 @@ from typing import Dict, Any, List, Optional, Tuple, Any as TypingAny, Mapping
 
 import chromadb
 from chromadb import SparseVector
-
 from chromadb.config import Settings as ChromaSettings
-from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
-from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import (
     TextLoader,
     JSONLoader,
     UnstructuredWordDocumentLoader,
     PyPDFLoader,
 )
+from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
 
 from app.core.config import Settings
 
