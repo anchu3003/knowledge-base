@@ -5,6 +5,7 @@ import {Button} from '@/components/ui/button';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {AppHeader} from '@/components/app-header';
 import {MessageWithCitations} from '@/components/message-with-citations';
+import {PiiBadge} from '@/components/pii-badge';
 import {ChatHistorySidebar} from '@/components/chat-history-sidebar';
 import type {Feedback} from '@/lib/types';
 
@@ -31,6 +32,8 @@ interface Message {
         model: string;
         temperature: number;
         max_tokens: number;
+        pii_redacted?: boolean;
+        pii_redacted_count?: number;
     };
     isStreaming?: boolean;
 }
@@ -310,6 +313,11 @@ export default function ChatPage() {
                                                     : 'bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100'
                                             }`}
                                         >
+                                            {message.role === 'assistant' && (
+                                                <div className="mb-1.5">
+                                                    <PiiBadge count={message.metadata?.pii_redacted_count ?? 0}/>
+                                                </div>
+                                            )}
                                             <MessageWithCitations
                                                 content={message.content}
                                                 isStreaming={message.isStreaming}

@@ -18,7 +18,6 @@ export function AppHeader() {
         if (!user) return [];
 
         const baseItems = [
-            {label: 'Info', href: 'http://localhost:8000/documents/folder-info'},
             {label: 'Refresh', href: 'http://localhost:8000/documents/refresh'},
             {label: 'Clear', href: 'http://localhost:8000/documents/clear'},
         ];
@@ -37,9 +36,6 @@ export function AppHeader() {
         let link = "";
         let method = "GET";
         switch (label) {
-            case 'Info':
-                link = "http://localhost:8000/documents/folder-info";
-                break;
             case 'Refresh':
                 link = "http://localhost:8000/documents/refresh";
                 method = "POST";
