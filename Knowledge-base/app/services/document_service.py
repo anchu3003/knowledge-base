@@ -19,6 +19,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
 
 from app.core.config import Settings
+from app.services.pii_service import PIIRedactor, redact_texts_for_ingest
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,10 @@ class DocumentService:
 
     def __init__(self, settings: Settings):
         self.settings = settings
+
+        # PII/secret redaction for ingestion (optional, gated by PII_REDACT_INGEST)
+        # See .clinerules/30-pii-safety.md
+        self.pii = PIIRedactor(settings)
 
         # Initialize embeddings using sentence-transformers
         self.embeddings = HuggingFaceEmbeddings(
@@ -243,6 +248,15 @@ class DocumentService:
         # Extract texts and metadata
         texts = [doc.page_content for doc in documents]
         metadatas = [doc.metadata for doc in documents]
+
+        # Optionally mask PII/secret before indexing (KB-1.2). Original files on disk
+        # are never touched — only the copy stored in the vector store.
+        if self.settings.pii_redact_ingest:
+            texts, metadatas, redactions = redact_texts_for_ingest(self.pii, texts, metadatas)
+            if redactions:
+                logger.info(
+                    f"Ingest PII redaction: masked {redactions} value(s) across {len(texts)} chunks."
+                )
 
         batch_size = max(1, self.settings.embedding_batch_size)
         total = len(texts)

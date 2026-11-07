@@ -71,8 +71,15 @@ class Settings(BaseSettings):
     rewrite_system_prompt_path: str = Field(default="./prompts/rewrite_system_prompt.txt",
                                             alias="REWRITE_SYSTEM_PROMPT_PATH")
 
-    # local only
-    # model_config = SettingsConfigDict(env_file=".env", env_prefix="", env_file_encoding="utf-8")
+    # PII / secret redaction (see .clinerules/30-pii-safety.md)
+    enable_pii_redaction: bool = Field(default=True, alias="ENABLE_PII_REDACTION")
+    pii_placeholder: str = Field(default="[REDACTED:{type}]", alias="PII_PLACEHOLDER")
+    # Whether to redact PII in document chunks before indexing (KB-1.2)
+    pii_redact_ingest: bool = Field(default=False, alias="PII_REDACT_INGEST")
+
+    # Read .env for local development; real env vars still take precedence.
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="", env_file_encoding="utf-8",
+                                      extra="ignore")
 
 
 # ---------------------------
@@ -83,10 +90,14 @@ _settings: Optional[Settings] = None
 
 
 def get_settings() -> Settings:
-    """Get application settings (singleton pattern)"""
+    """Get application settings (singleton pattern).
+
+    Provider is configured entirely via env / .env (see ADR-0001). Do NOT hard-code
+    a base URL here — it would override the environment.
+    """
     global _settings
     if _settings is None:
-        _settings = Settings(OPENAI_BASE_URL="https://aiportalapi.stu-platform.live/jpe")
+        _settings = Settings()
     return _settings
 
 
