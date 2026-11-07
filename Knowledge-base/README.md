@@ -44,7 +44,7 @@ Default container name: `rag-chatbot-api` (from `docker-compose.yml`).
 
 ## Local Setup (without Docker)
 
-1) Python environment
+1) Python environment (dev chuẩn: **WSL2 Ubuntu** — `AGENTS.md` §6, KB-7.1)
 
 - Create and activate a virtual environment.
   - PowerShell (Windows):
@@ -59,8 +59,10 @@ Default container name: `rag-chatbot-api` (from `docker-compose.yml`).
 2) Install dependencies
 
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt -r requirements-dev.txt
 ```
+
+> Code đặt trên Linux FS (`~/projects/kb-khoa-hoc`), **không** dùng `/mnt/c|/mnt/d` (chậm với `torch`).
 
 3) Configure environment
 
@@ -73,6 +75,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Open http://localhost:8000/docs
+
+5) Run tests
+
+```bash
+.venv/bin/python -m pytest -q     # 19 passed
+```
 
 ## How it Loads and Chats with Documents
 
