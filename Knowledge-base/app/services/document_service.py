@@ -19,6 +19,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
 
 from app.core.config import Settings
+from app.core.embeddings import build_embedding_params
 from app.services.pii_service import PIIRedactor, redact_texts_for_ingest
 
 logger = logging.getLogger(__name__)
@@ -34,11 +35,8 @@ class DocumentService:
         # See .clinerules/30-pii-safety.md
         self.pii = PIIRedactor(settings)
 
-        # Initialize embeddings using sentence-transformers
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-mpnet-base-v2",
-            model_kwargs={'device': 'cpu'}
-        )
+        # Initialize embeddings (local sentence-transformers; model from env — KB-6.2)
+        self.embeddings = HuggingFaceEmbeddings(**build_embedding_params(settings))
 
         self.chroma_client = chromadb.PersistentClient(
             path=settings.chroma_db_path,

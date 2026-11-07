@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     openai_api_type: str = Field(default="openai", alias="OPENAI_API_TYPE")
     openai_api_version: str = Field(default="2023-05-15", alias="OPENAI_API_VERSION")
 
+    # Embedding model (local sentence-transformers). Changing this requires re-indexing
+    # the vector store because the embedding dimension may differ (KB-6.2).
+    # Default: Qwen3-Embedding-0.6B — multilingual (VN + EN), 1024-dim.
+    embedding_model: str = Field(default="Qwen/Qwen3-Embedding-0.6B", alias="EMBEDDING_MODEL")
+
     # ChromaDB Settings
     chroma_db_path: str = Field(default="./chroma_db", alias="CHROMA_DB_PATH")
     collection_name: str = Field(default="documents", alias="COLLECTION_NAME")
