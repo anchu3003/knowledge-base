@@ -10,7 +10,7 @@ from openai import APIError, APIConnectionError, AuthenticationError, RateLimitE
 
 from app.core.config import Settings
 from app.services.document_service import DocumentService
-from app.services.pii_service import PIIRedactor
+from app.services.pii_service import PIIRedactor, summarize_pii_stats
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,8 @@ class ChatService:
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
                     "query_rewrite_attempts": rewrite_attempts,
-                    "pii_redaction": pii_stats
+                    "pii_redaction": pii_stats,
+                    **summarize_pii_stats(pii_stats)
                 }
             }
 
@@ -305,7 +306,8 @@ class ChatService:
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
                     "query_rewrite_attempts": rewrite_attempts,
-                    "pii_redaction": pii_stats
+                    "pii_redaction": pii_stats,
+                    **summarize_pii_stats(pii_stats)
                 }
             }
 
@@ -342,7 +344,8 @@ class ChatService:
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
                     "query_rewrite_attempts": rewrite_attempts,
-                    "pii_redaction": pii_stats
+                    "pii_redaction": pii_stats,
+                    **summarize_pii_stats(pii_stats)
                 }
             }
 

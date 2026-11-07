@@ -1,7 +1,7 @@
 """Unit test cho PIIRedactor (KB-1.1). Dữ liệu test là GIẢ, không dùng PII thật."""
 from types import SimpleNamespace
 
-from app.services.pii_service import PIIRedactor
+from app.services.pii_service import PIIRedactor, summarize_pii_stats
 
 
 def make_redactor(enabled: bool = True) -> PIIRedactor:
@@ -61,3 +61,14 @@ def test_disabled_is_passthrough():
 def test_stats_counts_multiple_emails():
     _, stats = make_redactor().redact_with_stats("a@b.com and c@d.com")
     assert stats.get("EMAIL") == 2
+
+
+def test_summarize_pii_stats_empty():
+    assert summarize_pii_stats({}) == {"pii_redacted": False, "pii_redacted_count": 0}
+
+
+def test_summarize_pii_stats_with_counts():
+    assert summarize_pii_stats({"EMAIL": 2, "PHONE": 1}) == {
+        "pii_redacted": True,
+        "pii_redacted_count": 3,
+    }
