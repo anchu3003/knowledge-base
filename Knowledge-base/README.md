@@ -128,7 +128,7 @@ Defined in `app/core/config.py`. All can be provided via `.env`.
   - `HYBRID_CANDIDATE_K` (default: `20`)
   - `ENABLE_RERANK` (default: `true`)
   - `RERANK_TOP_N` (default: `20`)
-  - `RERANK_MODEL` (default: `cross-encoder/ms-marco-MiniLM-L-6-v2`)
+  - `RERANK_MODEL` (default: `BAAI/bge-reranker-v2-m3`)
 
 - Chat
   - `DEFAULT_TEMPERATURE` (default: `0.7`)
