@@ -1,15 +1,27 @@
-fastapi
-uvicorn
+# Knowledge-base BE dependencies — pinned as ranges (>=floor,<next-major).
+# Floors = versions resolved in the current environment (see architecture.md §10).
+# Reproducible lock: generate with `uv pip compile requirements.in -o requirements.txt`
+# (or pip-tools) inside the real env; ranges below prevent silent major upgrades.
 
-pydantic
-pydantic-settings
+# --- Web framework ---
+fastapi>=0.123,<1.0
+uvicorn>=0.38,<1.0
 
-langchain
-langchain-openai
-langchain-community
-langchain_huggingface
+# --- Settings / validation ---
+pydantic>=2.12,<3.0
+pydantic-settings>=2.12,<3.0
 
-chromadb
+# --- LLM orchestration (LangChain 1.x split packages) ---
+langchain>=1.1,<2.0
+langchain-core>=1.1,<2.0
+langchain-openai>=1.1,<2.0
+langchain-community>=0.4,<0.5
+langchain-huggingface>=1.1,<2.0
+langchain-text-splitters>=1.0,<2.0
 
-sentence_transformers
-rank-bm25
+# --- Vector store ---
+chromadb>=1.3,<2.0
+
+# --- Embeddings (local) + sparse retrieval ---
+sentence-transformers>=3.0,<7.0
+rank-bm25>=0.2.2,<0.3

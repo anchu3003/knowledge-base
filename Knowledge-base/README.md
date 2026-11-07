@@ -14,7 +14,7 @@ This README consolidates the current, working setup based on the repository sour
 
 ## Tech Stack
 
-- Language: Python 3.11
+- Language: Python 3.13
 - Framework: FastAPI (served by Uvicorn)
 - RAG: LangChain, ChromaDB, sentence-transformers, BM25 re-ranking
 - Packaging: `requirements.txt` (pip)
@@ -22,7 +22,7 @@ This README consolidates the current, working setup based on the repository sour
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.13+
 - pip
 - Docker and Docker Compose (optional, for containerized run)
 

@@ -1,5 +1,5 @@
 ## ---------- Builder stage: build wheels to speed up installs ----------
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /wheels
 
@@ -15,7 +15,7 @@ RUN pip install --upgrade pip setuptools wheel \
 
 
 ## ---------- Final stage: minimal runtime image ----------
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Set workdir
 WORKDIR /app
