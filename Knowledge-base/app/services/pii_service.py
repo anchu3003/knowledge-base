@@ -107,6 +107,17 @@ class PIIRedactor:
         return {"redacted": len(found)} if found else {}
 
 
+def summarize_pii_stats(stats: Dict[str, int]) -> Dict[str, Any]:
+    """Rút gọn stats {loại: số} thành cờ metadata cho response (KB-1.3).
+
+    Trả `{"pii_redacted": bool, "pii_redacted_count": int}` để FE hiển thị badge.
+    """
+    return {
+        "pii_redacted": bool(stats),
+        "pii_redacted_count": int(sum(stats.values())) if stats else 0,
+    }
+
+
 def redact_texts_for_ingest(
     redactor: PIIRedactor,
     texts: List[str],
