@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     hybrid_candidate_k: int = Field(default=20, alias="HYBRID_CANDIDATE_K")
     enable_rerank: bool = Field(default=True, alias="ENABLE_RERANK")
     rerank_top_n: int = Field(default=20, alias="RERANK_TOP_N")
-    rerank_model: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2", alias="RERANK_MODEL")
+    rerank_model: str = Field(default="BAAI/bge-reranker-v2-m3", alias="RERANK_MODEL")
 
     # Chat Settings
     default_temperature: float = Field(default=0.7, alias="DEFAULT_TEMPERATURE")
