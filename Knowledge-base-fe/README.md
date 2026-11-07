@@ -3,19 +3,22 @@ step 2: npm run dev
 
 ## Quick start (developer)
 
-Prerequisites:
+Prerequisites (dev chuẩn: **WSL2 Ubuntu** — `AGENTS.md` §6, KB-7.1):
 
-- Node.js (16+), npm or pnpm
-- Python 3.10+ and virtualenv (recommended)
+- Node.js **LTS** (v26) — cài trong WSL bằng `fnm`: `fnm install --lts` (đừng dùng Node của Windows `/mnt/c`)
+- npm (đi kèm Node)
 
 1. Clone the repository and install frontend dependencies
 
 ```bash
-cd /path/to/v0-aoa-website-design
-# using pnpm (recommended if you use pnpm)
-pnpm install
-# or with npm
-npm install
+cd ~/projects/kb-khoa-hoc/Knowledge-base-fe
+npm ci            # reproducible theo package-lock.json
+```
+
+1b. Production build (verify trước khi commit)
+
+```bash
+npm run build
 ```
 
 2. Set up the Python environment for the backend
