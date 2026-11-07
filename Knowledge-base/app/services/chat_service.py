@@ -10,6 +10,7 @@ from openai import APIError, APIConnectionError, AuthenticationError, RateLimitE
 
 from app.core.config import Settings
 from app.services.document_service import DocumentService
+from app.services.pii_service import PIIRedactor
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,10 @@ class ChatService:
         # Store conversations in memory
         # (In production, this should be replaced with a database)
         self.conversations: Dict[str, List[Dict[str, Any]]] = {}
+
+        # PII/secret redaction applied to every payload sent to the LLM
+        # (see .clinerules/30-pii-safety.md)
+        self.pii = PIIRedactor(settings)
 
     async def chat(
             self,
@@ -154,6 +159,9 @@ class ChatService:
             system_prompt = self._create_system_prompt(context)
             messages = self._build_messages(system_prompt, conversation_history, message)
 
+            # Mask PII/secrets before anything leaves for the LLM
+            messages, pii_stats = self._redact_messages(messages)
+
             # Update LLM parameters
             self.llm.temperature = temperature
             self.llm.max_tokens = max_tokens
@@ -181,7 +189,8 @@ class ChatService:
                     "original_query": message,
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
-                    "query_rewrite_attempts": rewrite_attempts
+                    "query_rewrite_attempts": rewrite_attempts,
+                    "pii_redaction": pii_stats
                 }
             }
 
@@ -275,6 +284,9 @@ class ChatService:
             system_prompt = self._create_system_prompt(context)
             messages = self._build_messages(system_prompt, conversation_history, message)
 
+            # Mask PII/secrets before anything leaves for the LLM
+            messages, pii_stats = self._redact_messages(messages)
+
             # Update LLM parameters
             self.llm.temperature = temperature
             self.llm.max_tokens = max_tokens
@@ -292,7 +304,8 @@ class ChatService:
                     "original_query": message,
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
-                    "query_rewrite_attempts": rewrite_attempts
+                    "query_rewrite_attempts": rewrite_attempts,
+                    "pii_redaction": pii_stats
                 }
             }
 
@@ -328,7 +341,8 @@ class ChatService:
                     "original_query": message,
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
-                    "query_rewrite_attempts": rewrite_attempts
+                    "query_rewrite_attempts": rewrite_attempts,
+                    "pii_redaction": pii_stats
                 }
             }
 
@@ -390,7 +404,9 @@ class ChatService:
                 )
 
             system = SystemMessage(content=rewrite_system_prompt)
-            human = HumanMessage(content=f"Original query: {original_query}\nRewritten search query:")
+            # Redact PII before sending the query to the LLM (it may contain personal info)
+            safe_query, _ = self.pii.redact_with_stats(original_query)
+            human = HumanMessage(content=f"Original query: {safe_query}\nRewritten search query:")
 
             # Temporarily adjust parameters for rewriting
             prev_temp = getattr(self.llm, "temperature", 0.7)
@@ -484,6 +500,27 @@ class ChatService:
             "        **Remember:** You have deep knowledge of this specific RAG Chatbot API project. Use it fully!\n"
             "        "
         )
+
+    def _redact_messages(self, messages: List[Any]) -> tuple[List[Any], Dict[str, int]]:
+        """Return (messages, stats) with PII/secret redacted from every message content.
+
+        Applied at the outbound gate to the LLM so PII inside the retrieved context
+        (not only the user's question) is masked too. See `.clinerules/30-pii-safety.md`.
+        """
+        if not self.pii.enabled:
+            return messages, {}
+        redacted_messages: List[Any] = []
+        totals: Dict[str, int] = {}
+        for msg in messages:
+            content = getattr(msg, "content", None)
+            if isinstance(content, str):
+                redacted, stats = self.pii.redact_with_stats(content)
+                if redacted != content:
+                    msg = msg.__class__(content=redacted)
+                    for key, val in stats.items():
+                        totals[key] = totals.get(key, 0) + val
+            redacted_messages.append(msg)
+        return redacted_messages, totals
 
     def _build_messages(
             self,
