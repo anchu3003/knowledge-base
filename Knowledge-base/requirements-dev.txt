@@ -1,2 +1,2 @@
 # Dev/test dependencies (không dùng cho production)
-pytest
+pytest>=8,<10
