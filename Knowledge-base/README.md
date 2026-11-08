@@ -129,7 +129,11 @@ Defined in `app/core/config.py`. All can be provided via `.env`.
 
 - RAG Retrieval and Ranking
   - `RETRIEVAL_K` (default: `5`)
-  - `SIMILARITY_THRESHOLD` (default: `0.7`)
+  - `SIMILARITY_THRESHOLD` (default: `0.0` = off) — cosine floor cho **dense candidates**; không áp cho
+    score hybrid/rerank. Đặt số khi chưa đo sẽ mất recall (0.7 từng làm `hit@k` 0.933 → 0.333), xem KB-2.5.
+  - `DEDUP_ENABLED` (default: `true`) — bỏ chunk gần trùng nội dung trước khi cắt top-k
+  - `DEDUP_JACCARD_THRESHOLD` (default: `0.8`) — ngưỡng Jaccard shingle 3-gram để coi là "gần trùng"
+  - `MAX_CHUNKS_PER_FILE` (default: `2`, `0` = off) — tối đa số chunk cùng 1 file trong top-k
   - `ENABLE_BM25` (default: `true`)
   - `ENABLE_HYBRID` (default: `true`)
   - `HYBRID_ALPHA` (default: `0.5`)
