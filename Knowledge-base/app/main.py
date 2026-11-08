@@ -333,7 +333,7 @@ async def get_documents_folder_info():
                 ext = file_path.suffix.lower()
                 files_info[ext] = files_info.get(ext, 0) + 1
 
-                if ext in settings.supported_extensions:
+                if ext in setting.supported_extensions:
                     supported_files.append({
                         "name": file_path.name,
                         "path": str(file_path.relative_to(docs_folder)),
@@ -348,7 +348,7 @@ async def get_documents_folder_info():
             "files_by_extension": files_info,
             "supported_files_count": len(supported_files),
             "supported_files": supported_files[:20],  # Limit to first 20 for display
-            "auto_load_enabled": settings.auto_load_on_startup
+            "auto_load_enabled": setting.auto_load_on_startup
         }
 
     except AppError:
