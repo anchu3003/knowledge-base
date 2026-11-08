@@ -1,0 +1,140 @@
+import {describe, expect, it, vi} from 'vitest';
+import {render, screen} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import {
+    CLEAR_CONFIRM_WORD,
+    DocumentsPanelContent,
+    canConfirmClear,
+    failedChecks,
+    readyTone,
+} from '@/components/documents-panel';
+
+const baseProps = {
+    status: {collection_name: 'kb_documents', document_count: 128, status: 'healthy'},
+    folder: {folder_path: '/srv/docs', exists: true, total_files: 7, supported_files_count: 6},
+    ready: {status: 'ok', checks: {provider_config: {ok: true, detail: 'model=gpt-4o-mini'}}},
+    loading: false,
+    loadError: null,
+    actionError: null,
+    busy: null,
+    pending: null,
+    refreshResult: null,
+    cleared: false,
+    clearInput: '',
+    onReload: vi.fn(),
+    onClose: vi.fn(),
+    onAskRefresh: vi.fn(),
+    onAskClear: vi.fn(),
+    onCancel: vi.fn(),
+    onConfirmRefresh: vi.fn(),
+    onConfirmClear: vi.fn(),
+    onClearInputChange: vi.fn(),
+} as const;
+
+describe('DocumentsPanelContent (KB-4.5)', () => {
+    it('hiện số chunk, collection, file trong folder', () => {
+        render(<DocumentsPanelContent {...baseProps}/>);
+
+        expect(screen.getByText('Chunk đã index')).toBeInTheDocument();
+        expect(screen.getByText('128')).toBeInTheDocument();
+        expect(screen.getByText('kb_documents')).toBeInTheDocument();
+        expect(screen.getByText('7')).toBeInTheDocument();
+    });
+
+    it('/ready = error ⇒ badge lỗi + tên check fail, chỉ rõ lý do', () => {
+        render(<DocumentsPanelContent {...baseProps} ready={{
+            status: 'error',
+            checks: {
+                provider_config: {ok: false, detail: 'missing config: OPENAI_API_KEY'},
+                collection: {ok: true, detail: '128 chunks indexed'},
+            },
+        }}/>);
+
+        expect(screen.getByText(/Có check lỗi/)).toBeInTheDocument();
+        expect(screen.getByText('provider_config')).toBeInTheDocument();
+        expect(screen.getByText(/: missing config: OPENAI_API_KEY/)).toBeInTheDocument();
+        // check ok không bị liệt kê như lỗi
+        expect(screen.queryByText('collection')).toBeNull();
+    });
+
+    it('lỗi tải dữ liệu ⇒ banner đúng contract KB-4.1 (code + request_id)', () => {
+        render(<DocumentsPanelContent {...baseProps} loadError={{
+            code: 'document_store_error',
+            message: 'Backend gặp lỗi khi đọc/ghi kho tài liệu.',
+            hint: 'Thử lại.',
+            requestId: 'req-9',
+            retryable: false,
+        }}/>);
+
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+        expect(screen.getByText(/code=document_store_error/)).toBeInTheDocument();
+        expect(screen.getByText(/request_id=req-9/)).toBeInTheDocument();
+    });
+
+    it('pending clear ⇒ nút xác nhận bị khoá cho tới khi gõ đúng CLEAR', async () => {
+        const onConfirmClear = vi.fn();
+        const {rerender} = render(
+            <DocumentsPanelContent {...baseProps} pending="clear" onConfirmClear={onConfirmClear}/>
+        );
+
+        const confirmButton = screen.getByRole('button', {name: 'Xác nhận xoá index'});
+        expect(confirmButton).toBeDisabled();
+
+        // giả lập người dùng đã gõ đúng từ khoá (state do container giữ)
+        rerender(<DocumentsPanelContent {...baseProps} pending="clear" clearInput={CLEAR_CONFIRM_WORD}
+                                         onConfirmClear={onConfirmClear}/>);
+        await userEvent.click(screen.getByRole('button', {name: 'Xác nhận xoá index'}));
+
+        expect(onConfirmClear).toHaveBeenCalledOnce();
+    });
+
+    it('refresh xong ⇒ hiện processed_files/total_chunks', () => {
+        render(<DocumentsPanelContent {...baseProps} refreshResult={{
+            success: true, message: 'Successfully refreshed 7 documents',
+            processed_files: 7, total_chunks: 128,
+        }}/>);
+
+        expect(screen.getByText(/7 file/)).toBeInTheDocument();
+        expect(screen.getByText(/128 chunk/)).toBeInTheDocument();
+    });
+
+    it('bấm "Refresh index" / "Clear" ⇒ gọi callback tương ứng', async () => {
+        const onAskRefresh = vi.fn();
+        const onAskClear = vi.fn();
+        render(<DocumentsPanelContent {...baseProps} onAskRefresh={onAskRefresh} onAskClear={onAskClear}/>);
+
+        await userEvent.click(screen.getByRole('button', {name: /Refresh index/}));
+        await userEvent.click(screen.getByRole('button', {name: /^Clear$/}));
+
+        expect(onAskRefresh).toHaveBeenCalledOnce();
+        expect(onAskClear).toHaveBeenCalledOnce();
+    });
+});
+
+describe('helpers của DocumentsPanel', () => {
+    it('readyTone: giá trị lạ ⇒ unknown (không crash)', () => {
+        expect(readyTone('ok')).toBe('ok');
+        expect(readyTone('degraded')).toBe('degraded');
+        expect(readyTone('weird')).toBe('unknown');
+        expect(readyTone(undefined)).toBe('unknown');
+    });
+
+    it('failedChecks chỉ trả check ok=false', () => {
+        const failures = failedChecks({
+            status: 'error',
+            checks: {
+                a: {ok: false, detail: 'x'},
+                b: {ok: true, detail: 'y'},
+            },
+        });
+
+        expect(failures).toEqual([{name: 'a', detail: 'x'}]);
+        expect(failedChecks(null)).toEqual([]);
+    });
+
+    it('canConfirmClear so khớp chính xác', () => {
+        expect(canConfirmClear('CLEAR')).toBe(true);
+        expect(canConfirmClear('clear')).toBe(false);
+        expect(canConfirmClear('CLEAR ')).toBe(false);
+    });
+});
