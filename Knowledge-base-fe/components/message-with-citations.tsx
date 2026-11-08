@@ -33,6 +33,8 @@ interface MessageWithCitationsProps {
     isUser?: boolean;
     /** Bấm chip `[S#]` trong câu trả lời (KB-4.2; KB-4.3 nối vào panel nguồn). */
     onCitationClick?: (citationId: string) => void;
+    /** Người dùng bấm **Stop** giữa lúc stream (KB-4.4) — text đã nhận vẫn giữ, chỉ thêm nhãn. */
+    stopped?: boolean;
 }
 
 export function MessageWithCitations({
@@ -42,6 +44,7 @@ export function MessageWithCitations({
                                          sources = [],
                                          isUser = false,
                                          onCitationClick,
+                                         stopped = false,
                                      }: MessageWithCitationsProps) {
     const [copied, setCopied] = useState(false);
 
@@ -91,6 +94,11 @@ export function MessageWithCitations({
                     )}
                 </div>
                 {isStreaming && <TypingIndicator/>}
+                {stopped && !isStreaming && (
+                    <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+                        ⏹ Đã dừng — câu trả lời chỉ gồm phần đã nhận.
+                    </p>
+                )}
             </div>
 
             {/* Sources (new format) */}

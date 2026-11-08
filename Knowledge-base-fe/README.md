@@ -23,6 +23,19 @@ xem KB-4.7).
 - Nhãn `[S1]` → chip bấm được (`onCitationClick`), **trừ** khi nằm trong code fence/inline code.
   Việc nối chip → panel nguồn (scroll + highlight) ở **KB-4.3**.
 
+## Streaming SSE + nút Stop (KB-4.4)
+
+- `lib/sse.ts`: parser SSE **thuần** (không `fetch`/DOM ⇒ test được bằng `node`) — tách frame theo `\n\n`,
+  bỏ comment heartbeat `: ping`, buffer frame bị cắt giữa 2 chunk, chuẩn hoá CRLF; `parseChatEvent()` map
+  `start | token | end | error` (JSON hỏng/type lạ → bỏ, không làm chết stream).
+- `lib/api.ts`: `streamChat()` — `fetch` + `ReadableStream` reader + `TextDecoder({stream: true})` (tiếng Việt
+  không lỗi khi ký tự UTF-8 bị cắt), `AbortController` cho nút **Stop** ⇒ ném `StreamAbortedError`
+  (phân biệt với lỗi mạng thật). Lỗi HTTP trước khi stream vẫn là `ApiError` như `apiFetch`.
+- `app/page.tsx`: **stream mặc định** — bubble assistant rỗng `isStreaming` rồi nối từng `token`, chốt khi `end`
+  (`end.answer` + `sources` + `metadata`), event `error` ⇒ banner KB-4.1 + **giữ partial**; bấm **Stop** ⇒ huỷ
+  request, giữ phần đã nhận + nhãn "đã dừng" (Q&A KB-4.4 Q1).
+- `NEXT_PUBLIC_STREAMING=false` khi build ⇒ quay lại `POST /chat` blocking (hành vi KB-4.1).
+
 ## Panel nguồn theo `citation_id` (KB-4.3)
 
 - `components/sources-panel.tsx`: **1 card / chunk** (không dedup theo `file_path` — trả TD-12), key React là

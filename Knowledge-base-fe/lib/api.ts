@@ -10,6 +10,7 @@
  */
 
 import type { ChatRequest, ChatResponse } from './types';
+import { createSseParser, isAbortError, parseChatEvent, type ChatStreamEvent } from './sse';
 
 export const API_BASE_URL: string =
     (process.env.NEXT_PUBLIC_API_PROXY_URL as string) || 'http://localhost:8000';
@@ -124,4 +125,104 @@ export async function postChat(body: ChatRequest, init?: RequestInit): Promise<C
         body: JSON.stringify(body),
         ...init,
     });
+}
+
+// ------------------------------
+// Streaming SSE (KB-4.4)
+// ------------------------------
+
+/**
+ * Streaming **bật mặc định** cho mọi câu hỏi (Q&A KB-4.4 Q2); `NEXT_PUBLIC_STREAMING=false` khi build
+ * ⇒ quay lại `/chat` blocking, UI không đổi hành vi.
+ */
+export const STREAMING_ENABLED =
+    (process.env.NEXT_PUBLIC_STREAMING ?? 'true').toString().toLowerCase() !== 'false';
+
+/** Người dùng bấm **Stop** — không phải lỗi, UI không hiện banner lỗi. */
+export class StreamAbortedError extends Error {
+    constructor() {
+        super('Stream aborted by user');
+        this.name = 'StreamAbortedError';
+    }
+}
+
+export interface StreamChatOptions {
+    /** `AbortController.signal` — bấm Stop ⇒ `abort()` để huỷ request. */
+    signal?: AbortSignal;
+    /** Nhận từng event đã parse: `start` / `token` / `end` / `error`. */
+    onEvent: (event: ChatStreamEvent) => void;
+}
+
+/**
+ * `POST /chat/stream` — đọc SSE bằng `fetch` + `ReadableStream` reader (không dùng `EventSource` vì cần POST).
+ *
+ * - Frame bị cắt giữa 2 chunk / nhiều byte UTF-8 (tiếng Việt) ⇒ `TextDecoder({stream: true})` + parser buffer.
+ * - Heartbeat `: ping` bị bỏ (xem `lib/sse.ts`).
+ * - Bấm Stop ⇒ ném `StreamAbortedError` (phân biệt với lỗi mạng thật).
+ * - HTTP lỗi trước khi stream ⇒ `ApiError` như `apiFetch` (cùng envelope `error.code`).
+ */
+export async function streamChat(
+    body: ChatRequest,
+    options: StreamChatOptions,
+): Promise<void> {
+    let response: Response;
+
+    try {
+        response = await fetch(`${API_BASE_URL}/chat/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'text/event-stream',
+            },
+            body: JSON.stringify(body),
+            signal: options.signal,
+        });
+    } catch (error) {
+        if (isAbortError(error)) throw new StreamAbortedError();
+        throw new ApiError({
+            code: NETWORK_ERROR_CODE,
+            message: 'Không kết nối được tới server.',
+            status: 0,
+        });
+    }
+
+    if (!response.ok) {
+        throw toApiError(response, await response.text().catch(() => ''));
+    }
+
+    if (!response.body) {
+        throw new ApiError({
+            code: UNKNOWN_ERROR_CODE,
+            message: 'Server không trả về stream đọc được.',
+            requestId: response.headers.get(REQUEST_ID_HEADER) || '-',
+            status: response.status,
+        });
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const parser = createSseParser();
+
+    const emit = (payloads: string[]) => {
+        for (const payload of payloads) {
+            const event = parseChatEvent(payload);
+            if (event) options.onEvent(event);
+        }
+    };
+
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            emit(parser.push(decoder.decode(value, { stream: true })));
+        }
+        // Ký tự UTF-8 còn dở trong decoder + frame cuối không có `\n\n`
+        emit(parser.push(decoder.decode()));
+        emit(parser.flush());
+    } catch (error) {
+        if (isAbortError(error) || options.signal?.aborted) throw new StreamAbortedError();
+        throw error;
+    } finally {
+        reader.cancel().catch(() => undefined);
+    }
 }

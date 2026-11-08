@@ -8,9 +8,10 @@ import {MessageWithCitations} from '@/components/message-with-citations';
 import {SourcesPanel} from '@/components/sources-panel';
 import {PiiBadge} from '@/components/pii-badge';
 import {ChatHistorySidebar} from '@/components/chat-history-sidebar';
-import {ApiError, postChat} from '@/lib/api';
+import {ApiError, STREAMING_ENABLED, StreamAbortedError, postChat, streamChat} from '@/lib/api';
 import {describeApiError, type ApiErrorView} from '@/lib/errors';
 import type {ChatMetadata, ChatSource} from '@/lib/types';
+import {Square} from 'lucide-react';
 
 /** Key localStorage giữ `conversation_id` (Q&A KB-4.1: reload vẫn hỏi tiếp mạch). */
 const CONVERSATION_STORAGE_KEY = 'kb.conversation_id';
@@ -28,6 +29,8 @@ interface Message {
     sources?: ChatSource[];
     metadata?: ChatMetadata;
     isStreaming?: boolean;
+    /** Người dùng bấm **Stop** giữa lúc stream (KB-4.4) — giữ text đã nhận, hiện nhãn "đã dừng". */
+    stopped?: boolean;
 }
 
 interface ChatSession {
@@ -83,6 +86,8 @@ export default function ChatPage() {
     // KB-4.3: chip `[S#]` nào vừa được bấm ⇒ panel nguồn của message đó scroll + highlight card
     const [citationFocus, setCitationFocus] = useState<CitationFocus | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    // KB-4.4: controller của request đang stream — nút Stop gọi `abort()`
+    const abortRef = useRef<AbortController | null>(null);
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -144,9 +149,22 @@ export default function ChatPage() {
         await submitQuestion(question, {appendUserMessage: true});
     };
 
+    /** Cập nhật một message theo `id` (dùng cho từng token stream — KB-4.4). */
+    const updateAssistant = (id: string, updater: (message: Message) => Message) => {
+        setMessages((prev) => prev.map((message) => (message.id === id ? updater(message) : message)));
+    };
+
+    /** Bỏ bubble assistant rỗng (lỗi/Stop trước khi có token nào) — không để khung chat trống trơn. */
+    const dropIfEmpty = (id: string) => {
+        setMessages((prev) => prev.filter((message) => !(message.id === id && message.content.trim().length === 0)));
+    };
+
     /**
-     * Gửi câu hỏi qua API client (KB-4.1) và cập nhật UI.
-     * `appendUserMessage=false` khi bấm "Thử lại" — message user đã nằm trong khung chat rồi.
+     * Gửi câu hỏi và cập nhật UI.
+     *
+     * - **Mặc định stream** `POST /chat/stream` (KB-4.4): chữ hiện dần, Stop huỷ request, giữ partial text.
+     * - `NEXT_PUBLIC_STREAMING=false` ⇒ quay lại `POST /chat` blocking (hành vi KB-4.1).
+     * - `appendUserMessage=false` khi bấm "Thử lại" — message user đã nằm trong khung chat rồi.
      */
     const submitQuestion = async (question: string, options: {appendUserMessage: boolean}) => {
         setApiError(null);
@@ -166,44 +184,146 @@ export default function ChatPage() {
             );
         }
 
-        try {
-            const data = await postChat({
-                message: question,
-                conversation_id: conversationId ?? undefined,
-                max_tokens: maxTokens,
-                temperature,
-            });
+        // ---- Fallback: blocking `/chat` khi NEXT_PUBLIC_STREAMING=false (hành vi KB-4.1) ----
+        if (!STREAMING_ENABLED) {
+            try {
+                const data = await postChat({
+                    message: question,
+                    conversation_id: conversationId ?? undefined,
+                    max_tokens: maxTokens,
+                    temperature,
+                });
 
-            if (data.conversation_id) {
-                setConversationId(data.conversation_id);
+                if (data.conversation_id) {
+                    setConversationId(data.conversation_id);
+                }
+
+                // KB-4.3: KHÔNG dedup theo `file_path` — mỗi phần tử `sources[]` là 1 chunk với `citation_id` riêng.
+                const sources: ChatSource[] = data.sources ?? [];
+
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: (Date.now() + 1).toString(),
+                        role: 'assistant',
+                        content: data.response || '',
+                        sources,
+                        metadata: data.metadata,
+                    },
+                ]);
+                setRetryText(null);
+            } catch (error) {
+                // Banner lỗi theo `error.code`; KHÔNG chèn message giả vào khung chat
+                setApiError(describeApiError(error));
+                setRetryText(question);
+                if (!(error instanceof ApiError)) {
+                    // lỗi runtime ngoài dự kiến — vẫn log để debug, không lộ ra UI
+                    console.debug('Unexpected chat error', error);
+                }
+            } finally {
+                setIsLoading(false);
             }
+            return;
+        }
 
-            // KB-4.3: KHÔNG dedup theo `file_path` nữa — mỗi phần tử `sources[]` là 1 chunk với
-            // `citation_id` riêng (`[S1]`, `[S2]`, …) ⇒ panel nguồn hiện đủ, chip `[S#]` trỏ đúng card (trả TD-12).
-            const sources: ChatSource[] = data.sources ?? [];
+        // ---- Mặc định: streaming SSE `POST /chat/stream` (KB-4.4) ----
+        const assistantId = `assistant-${Date.now()}`;
+        const controller = new AbortController();
+        abortRef.current = controller;
+        let failed = false;
 
-            setMessages((prev) => [
-                ...prev,
+        // Bubble rỗng + `isStreaming`: chữ sẽ được nối dần theo từng event `token`
+        setMessages((prev) => [
+            ...prev,
+            {id: assistantId, role: 'assistant', content: '', isStreaming: true},
+        ]);
+
+        try {
+            await streamChat(
                 {
-                    id: (Date.now() + 1).toString(),
-                    role: 'assistant',
-                    content: data.response || '',
-                    sources,
-                    metadata: data.metadata,
+                    message: question,
+                    conversation_id: conversationId ?? undefined,
+                    max_tokens: maxTokens,
+                    temperature,
                 },
-            ]);
-            setRetryText(null);
+                {
+                    signal: controller.signal,
+                    onEvent: (event) => {
+                        if (event.type === 'start') {
+                            if (event.conversation_id) setConversationId(event.conversation_id);
+                            if (event.metadata) {
+                                updateAssistant(assistantId, (message) => ({...message, metadata: event.metadata}));
+                            }
+                            return;
+                        }
+
+                        if (event.type === 'token') {
+                            updateAssistant(assistantId, (message) => ({
+                                ...message,
+                                content: message.content + event.token,
+                            }));
+                            return;
+                        }
+
+                        if (event.type === 'end') {
+                            if (event.conversation_id) setConversationId(event.conversation_id);
+                            // `end.answer` là bản chốt của BE ⇒ dùng làm nguồn sự thật (không lệch do token rơi)
+                            updateAssistant(assistantId, (message) => ({
+                                ...message,
+                                content: event.answer ?? message.content,
+                                sources: event.sources ?? message.sources,
+                                metadata: event.metadata ?? message.metadata,
+                                isStreaming: false,
+                            }));
+                            return;
+                        }
+
+                        // event `error` giữa stream: banner KB-4.1 + GIỮ partial text đã nhận
+                        failed = true;
+                        updateAssistant(assistantId, (message) => ({...message, isStreaming: false}));
+                        dropIfEmpty(assistantId);
+                        setApiError(
+                            describeApiError(
+                                new ApiError({
+                                    code: event.error.code,
+                                    message: event.error.message,
+                                    requestId: event.error.request_id,
+                                    status: 0,
+                                })
+                            )
+                        );
+                        setRetryText(question);
+                    },
+                }
+            );
+            if (!failed) setRetryText(null);
         } catch (error) {
-            // Banner lỗi theo `error.code`; KHÔNG chèn message giả vào khung chat
-            setApiError(describeApiError(error));
-            setRetryText(question);
-            if (!(error instanceof ApiError)) {
-                // lỗi runtime ngoài dự kiến — vẫn log để debug, không lộ ra UI
-                console.debug('Unexpected chat error', error);
+            if (error instanceof StreamAbortedError) {
+                // Q&A KB-4.4 Q1: bấm Stop ⇒ GIỮ phần đã nhận, đánh dấu "đã dừng" (BE đã lưu partial)
+                updateAssistant(assistantId, (message) => ({
+                    ...message,
+                    isStreaming: false,
+                    stopped: true,
+                }));
+                dropIfEmpty(assistantId);
+            } else {
+                updateAssistant(assistantId, (message) => ({...message, isStreaming: false}));
+                dropIfEmpty(assistantId);
+                setApiError(describeApiError(error));
+                setRetryText(question);
+                if (!(error instanceof ApiError)) {
+                    console.debug('Unexpected stream error', error);
+                }
             }
         } finally {
+            abortRef.current = null;
             setIsLoading(false);
         }
+    };
+
+    /** Nút **Stop** (KB-4.4): huỷ request đang stream — text đã nhận giữ nguyên. */
+    const handleStopStreaming = () => {
+        abortRef.current?.abort();
     };
 
     const handleRetry = async () => {
@@ -417,6 +537,7 @@ export default function ChatPage() {
                                                 onCitationClick={(citationId) =>
                                                     handleCitationClick(message.id, citationId)
                                                 }
+                                                stopped={message.stopped}
                                             />
                                         </div>
 
@@ -448,8 +569,8 @@ export default function ChatPage() {
                                 </div>
                             ))}
 
-                            {/* Beautiful loading indicator */}
-                            {isLoading && (
+                            {/* Beautiful loading indicator — chỉ hiện khi CHƯA có bubble stream (KB-4.4) */}
+                            {isLoading && !messages.some((message) => message.isStreaming) && (
                                 <div
                                     className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <div
@@ -517,6 +638,19 @@ export default function ChatPage() {
                                             </div>
                                         )}
                                     </div>
+                                    {isLoading && STREAMING_ENABLED ? (
+                                    <Button
+                                        onClick={handleStopStreaming}
+                                        size="lg"
+                                        className="self-center px-8 py-6 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+                                        aria-label="Dừng trả lời"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <Square className="h-4 w-4" fill="currentColor"/>
+                                            Stop
+                                        </span>
+                                    </Button>
+                                ) : (
                                     <Button
                                         onClick={handleSendMessage}
                                         disabled={!input.trim() || isLoading}
@@ -551,6 +685,7 @@ export default function ChatPage() {
                                             'Send'
                                         )}
                                     </Button>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center justify-between mt-2">
