@@ -58,37 +58,25 @@ export function MessageWithCitations({
         }
     };
     return (
-        <div className="space-y-3">
-            <div
-                className={`max-w-md lg:max-w-xl px-4 py-3 rounded-lg relative ${
-                    isUser
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-card border border-border text-foreground'
-                }`}
-            >
+        <div className="relative space-y-3">
+            {/* KB-4.8: bỏ bubble riêng ở đây — `ChatMessages` đã là bubble ⇒ tránh "bubble lồng bubble" + `max-w-md` */}
+            <div className="relative">
                 {/* Actions: copy */}
                 {!isUser && (
                     <button
                         onClick={handleCopy}
-                        aria-label="Copy response"
-                        className="absolute top-2 right-2 inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/50 z-30"
-                        title="Copy response"
+                        aria-label="Sao chép câu trả lời"
+                        className="absolute top-1 right-1 z-30 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60"
+                        title="Sao chép câu trả lời"
                     >
-                        <Copy className="h-4 w-4"/>
-                        <span className="text-xs text-muted-foreground">
-                            {copied ? 'Copied' : 'Copy'}
-                        </span>
+                        <Copy className="h-3.5 w-3.5"/>
+                        <span>{copied ? 'Đã chép' : 'Sao chép'}</span>
                     </button>
                 )}
 
-                <div
-                    style={{
-                        marginTop: !isUser ? '20px' : '0',
-                    }}
-                    className="max-w-none pr-10 text-sm leading-relaxed"
-                >
+                <div className="pr-16">
                     {isUser ? (
-                        <p className="whitespace-pre-wrap break-words">{content}</p>
+                        <p className="break-words whitespace-pre-wrap">{content}</p>
                     ) : (
                         <MarkdownMessage content={content} onCitationClick={onCitationClick}/>
                     )}

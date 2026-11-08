@@ -297,12 +297,18 @@
 }
 
 /* ==========================================
-   Markdown message + code highlight (KB-4.2)
-   Không dùng tailwind-typography (không có trong deps) ⇒ style tường minh.
-   `.md-code` bọc code block; `.hljs-*` là token do rehype-highlight sinh ra.
+   Markdown typography (KB-4.8)
+   Q2 chốt: KHÔNG thêm `@tailwindcss/typography` (không thêm dep) — tự viết scale trong `.md-body`.
+   Trước KB-4.8 chỉ có margin của `p`; thiếu heading/list/table ⇒ câu trả lời dài khó đọc.
    ========================================== */
-.md-body p {
-    margin: 0.35rem 0;
+.md-body {
+    font-size: 0.9375rem; /* 15px — dễ đọc hơn 14px của bubble cũ */
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+}
+
+.md-body > * + * {
+    margin-top: 0.6rem;
 }
 
 .md-body > *:first-child {
@@ -311,6 +317,109 @@
 
 .md-body > *:last-child {
     margin-bottom: 0;
+}
+
+.md-body p {
+    margin: 0;
+}
+
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 1.1rem;
+}
+
+.md-body h1 {
+    font-size: 1.25rem;
+}
+
+.md-body h2 {
+    font-size: 1.125rem;
+}
+
+.md-body h3 {
+    font-size: 1rem;
+}
+
+.md-body h4 {
+    font-size: 0.9375rem;
+}
+
+.md-body ul,
+.md-body ol {
+    padding-left: 1.35rem;
+}
+
+.md-body ul {
+    list-style: disc;
+}
+
+.md-body ol {
+    list-style: decimal;
+}
+
+.md-body li + li {
+    margin-top: 0.25rem;
+}
+
+.md-body li > ul,
+.md-body li > ol {
+    margin-top: 0.25rem;
+}
+
+.md-body a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.md-body strong {
+    font-weight: 600;
+}
+
+.md-body blockquote {
+    border-left: 3px solid var(--border);
+    padding-left: 0.75rem;
+    color: var(--muted-foreground);
+}
+
+.md-body code:not(.md-code code) {
+    background: var(--muted);
+    border-radius: 4px;
+    padding: 0.1rem 0.3rem;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+}
+
+.md-body hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 1rem 0;
+}
+
+/* Bảng markdown (remark-gfm) — trước đây tràn ngang trong bubble hẹp */
+.md-body table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    display: block;
+    overflow-x: auto;
+}
+
+.md-body th,
+.md-body td {
+    border: 1px solid var(--border);
+    padding: 0.35rem 0.55rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.md-body th {
+    background: var(--muted);
+    font-weight: 600;
 }
 
 .md-code code {

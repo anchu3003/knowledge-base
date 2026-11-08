@@ -28,6 +28,7 @@ import type {
     ReadinessStatus,
 } from '@/lib/types';
 import {Button} from '@/components/ui/button';
+import {Sheet, SheetContent, SheetTitle} from '@/components/ui/sheet';
 import {CheckCircle2, Database, RefreshCw, Trash2, X, XCircle} from 'lucide-react';
 
 /** Từ khoá phải gõ để xác nhận xoá index (Q&A KB-4.5 Q2). */
@@ -188,29 +189,24 @@ export function DocumentsPanelContent({
     const refreshBlocked = refreshBlockedReason(folder);
 
     return (
-        <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true"
-             aria-label="Kho tài liệu và trạng thái backend">
-            <button type="button" aria-label="Đóng panel" onClick={onClose}
-                    className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px]"/>
-
-            <aside className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-                <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-                    <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        <Database className="h-4 w-4 text-violet-600 dark:text-violet-400"/>
-                        Kho tài liệu
-                    </h2>
-                    <div className="flex items-center gap-1">
-                        <button type="button" onClick={onReload} disabled={loading || disabled}
-                                aria-label="Tải lại trạng thái"
-                                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800">
-                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/>
-                        </button>
-                        <button type="button" onClick={onClose} aria-label="Đóng"
-                                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">
-                            <X className="h-4 w-4"/>
-                        </button>
-                    </div>
-                </header>
+        <div className="flex h-full flex-col">
+            <header className="flex items-center justify-between border-b border-border px-4 py-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Database className="h-4 w-4 text-primary"/>
+                    Kho tài liệu
+                </h2>
+                <div className="flex items-center gap-1">
+                    <button type="button" onClick={onReload} disabled={loading || disabled}
+                            aria-label="Tải lại trạng thái"
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-40">
+                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/>
+                    </button>
+                    <button type="button" onClick={onClose} aria-label="Đóng"
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted">
+                        <X className="h-4 w-4"/>
+                    </button>
+                </div>
+            </header>
 
                 <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
                     {loadError && <ErrorBox view={loadError}/>}
@@ -353,7 +349,6 @@ export function DocumentsPanelContent({
                         </Button>
                     </div>
                 </footer>
-            </aside>
         </div>
     );
 }
@@ -410,15 +405,7 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
         void load();
     }, [open, load]);
 
-    // Esc để đóng drawer
-    useEffect(() => {
-        if (!open) return;
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
-    }, [open, onClose]);
+    // Esc + focus trap + aria-modal: Radix `Sheet` (Dialog) lo, không cần effect thủ công (KB-4.8)
 
     const handleConfirmRefresh = async () => {
         setBusy('refresh');
@@ -455,44 +442,49 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
         }
     };
 
-    if (!open) return null;
-
     return (
-        <DocumentsPanelContent
-            status={status}
-            folder={folder}
-            ready={ready}
-            loading={loading}
-            loadError={loadError}
-            actionError={actionError}
-            busy={busy}
-            pending={pending}
-            refreshResult={refreshResult}
-            cleared={cleared}
-            clearInput={clearInput}
-            onReload={() => void load()}
-            onClose={onClose}
-            onAskRefresh={() => {
-                setActionError(null);
-                setRefreshResult(null);
-                setCleared(false);
-                setPending('refresh');
-            }}
-            onAskClear={() => {
-                setActionError(null);
-                setRefreshResult(null);
-                setCleared(false);
-                setClearInput('');
-                setPending('clear');
-            }}
-            onCancel={() => {
-                setPending(null);
-                setClearInput('');
-            }}
-            onConfirmRefresh={() => void handleConfirmRefresh()}
-            onConfirmClear={() => void handleConfirmClear()}
-            onClearInputChange={setClearInput}
-        />
+        <Sheet open={open} onOpenChange={(next) => {
+            if (!next) onClose();
+        }}>
+            <SheetContent side="right" showCloseButton={false} className="w-full gap-0 p-0 sm:max-w-md">
+                <SheetTitle className="sr-only">Kho tài liệu và trạng thái backend</SheetTitle>
+                <DocumentsPanelContent
+                    status={status}
+                    folder={folder}
+                    ready={ready}
+                    loading={loading}
+                    loadError={loadError}
+                    actionError={actionError}
+                    busy={busy}
+                    pending={pending}
+                    refreshResult={refreshResult}
+                    cleared={cleared}
+                    clearInput={clearInput}
+                    onReload={() => void load()}
+                    onClose={onClose}
+                onAskRefresh={() => {
+                    setActionError(null);
+                    setRefreshResult(null);
+                    setCleared(false);
+                    setPending('refresh');
+                }}
+                onAskClear={() => {
+                    setActionError(null);
+                    setRefreshResult(null);
+                    setCleared(false);
+                    setClearInput('');
+                    setPending('clear');
+                }}
+                onCancel={() => {
+                    setPending(null);
+                    setClearInput('');
+                }}
+                onConfirmRefresh={() => void handleConfirmRefresh()}
+                onConfirmClear={() => void handleConfirmClear()}
+                onClearInputChange={setClearInput}
+                />
+            </SheetContent>
+        </Sheet>
     );
 }
 

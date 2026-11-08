@@ -16,6 +16,9 @@ export default defineConfig({
     },
     test: {
         environment: 'jsdom',
+        // jsdom cần origin thật để có `window.localStorage` (KB-4.8: tái hiện lựa chọn theme).
+        // Không set ⇒ origin `about:blank` (opaque) ⇒ `window.localStorage === undefined`.
+        environmentOptions: {jsdom: {url: 'http://localhost:3000'}},
         globals: true,
         setupFiles: ['./tests/setup.ts'],
         include: ['tests/**/*.test.{ts,tsx}'],

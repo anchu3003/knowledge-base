@@ -179,7 +179,7 @@ export function MarkdownMessage({content, onCitationClick}: MarkdownMessageProps
     }), [onCitationClick]);
 
     return (
-        <div className="md-body text-sm leading-relaxed">
+        <div className="md-body">
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[[rehypeHighlight, {detect: false, ignoreMissing: true}]]}
