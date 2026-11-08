@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -221,21 +222,31 @@ class ChatService:
             message: str,
             conversation_id: Optional[str] = None,
             max_tokens: Optional[int] = None,
-            temperature: Optional[float] = None
+            temperature: Optional[float] = None,
+            request_id: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Stream chat response tokens as an async iterator of events.
 
-        Yields dict events with keys:
-        - type: one of "start", "token", "end", "error"
-        - other fields depending on the type
+        Contract (KB-3.3): `start → token* → (end | error)` — luôn có **một** event kết thúc.
+
+        - event `error` = `{"type": "error", "error": {code, message, request_id}}` (cùng schema với
+          envelope lỗi của `/chat`, taxonomy KB-3.1);
+        - client disconnect (`CancelledError`/`GeneratorExit`) ⇒ nếu đã phát ≥1 token thì lưu phần đã
+          stream vào history với `interrupted=True`, chưa có token thì bỏ (Q&A KB-3.3); log mức `info`,
+          không stack.
         """
         # Generate conversation ID if not provided
         if conversation_id is None:
             conversation_id = str(uuid.uuid4())
 
+        request_id = request_id or "-"
+
         # Set parameters
         max_tokens = max_tokens or self.settings.default_max_tokens
         temperature = temperature or self.settings.default_temperature
+
+        full_text = ""
+        emitted_tokens = False
 
         try:
             # Initial retrieval
@@ -315,7 +326,6 @@ class ChatService:
                 }
             }
 
-            full_text = ""
             async for chunk in self.provider.stream(lambda: self.llm.astream(messages), op="stream_chat"):
                 # chunk is typically an AIMessageChunk with .content containing incremental text
                 delta = getattr(chunk, "content", None)
@@ -325,6 +335,7 @@ class ChatService:
                 if not delta:
                     continue
                 full_text += delta
+                emitted_tokens = True
                 yield {"type": "token", "token": delta}
 
             # Update conversation history after completion
@@ -353,16 +364,39 @@ class ChatService:
                 }
             }
 
+        except (asyncio.CancelledError, GeneratorExit):
+            # Client disconnect — không phải lỗi ⇒ log `info`, KHÔNG stack trace.
+            # Q&A KB-3.3: giữ phần đã stream nếu đã có ≥1 token (đánh dấu `interrupted`), chưa có thì bỏ.
+            if emitted_tokens:
+                self._update_conversation(conversation_id, message, full_text, interrupted=True)
+                logger.info(
+                    "stream_chat interrupted request_id=%s conversation_id=%s chars=%s (saved partial answer)",
+                    request_id, conversation_id, len(full_text),
+                )
+            else:
+                logger.info(
+                    "stream_chat interrupted request_id=%s conversation_id=%s (no token yet, nothing saved)",
+                    request_id, conversation_id,
+                )
+            raise
         except AppError as e:
-            # SSE: event `error` có `code` hằng số + message chung (KB-3.3 sẽ thêm `request_id`).
-            logger.error("stream_chat failed: code=%s detail=%s", e.code, e.internal_detail)
-            yield {"type": "error", "code": e.code, "message": e.public_message}
+            logger.error(
+                "stream_chat failed: code=%s request_id=%s detail=%s", e.code, request_id, e.internal_detail,
+            )
+            yield {
+                "type": "error",
+                "error": {"code": e.code, "message": e.public_message, "request_id": request_id},
+            }
         except Exception as e:
             mapped = map_provider_error(e)
             logger.error(
-                "stream_chat failed: code=%s detail=%s", mapped.code, mapped.internal_detail, exc_info=True,
+                "stream_chat failed: code=%s request_id=%s detail=%s",
+                mapped.code, request_id, mapped.internal_detail, exc_info=True,
             )
-            yield {"type": "error", "code": mapped.code, "message": mapped.public_message}
+            yield {
+                "type": "error",
+                "error": {"code": mapped.code, "message": mapped.public_message, "request_id": request_id},
+            }
 
     async def _rewrite_query(self, original_query: str) -> str:
         """Use the LLM to rewrite the user query to improve retrieval.
@@ -544,8 +578,18 @@ class ChatService:
         messages.append(HumanMessage(content=current_message))
         return messages
 
-    def _update_conversation(self, conversation_id: str, user_message: str, ai_response: str):
-        """Update conversation history."""
+    def _update_conversation(
+            self,
+            conversation_id: str,
+            user_message: str,
+            ai_response: str,
+            interrupted: bool = False,
+    ):
+        """Update conversation history.
+
+        `interrupted=True` (KB-3.3): client ngắt giữa stream ⇒ vẫn lưu phần đã sinh nhưng đánh dấu
+        để lần sau biết câu trả lời chưa hoàn chỉnh.
+        """
         if conversation_id not in self.conversations:
             self.conversations[conversation_id] = []
 
@@ -559,11 +603,14 @@ class ChatService:
         })
 
         # Add AI response
-        conversation.append({
+        assistant_message = {
             "role": "assistant",
             "content": ai_response,
             "timestamp": datetime.now().isoformat()
-        })
+        }
+        if interrupted:
+            assistant_message["interrupted"] = True
+        conversation.append(assistant_message)
 
         # Limit conversation length
         max_length = self.settings.max_conversation_length * 2  # *2 for user+assistant pairs

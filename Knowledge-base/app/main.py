@@ -1,4 +1,3 @@
-import json
 import logging
 import warnings
 from contextlib import asynccontextmanager
@@ -28,6 +27,7 @@ from app.core.errors import (
     http_status_error,
 )
 from app.core.middleware import RequestIDMiddleware, get_request_id
+from app.core.sse import SSE_HEADERS, sse_event_stream
 from app.services.document_service import DocumentService
 from app.services.chat_service import ChatService
 from app.models.schemas import (
@@ -329,24 +329,35 @@ async def chat(
 
 @app.post("/chat/stream")
 async def chat_stream(
-        request: ChatRequest,
-        service: ChatService = Depends(get_chat_service)
+        payload: ChatRequest,
+        http_request: Request,
+        service: ChatService = Depends(get_chat_service),
 ):
-    """Stream chat responses as Server-Sent Events (SSE).
+    """Stream chat responses as Server-Sent Events (SSE) — KB-3.3.
 
-    Each event is a JSON object with a `type` field among: start, token, end, error.
+    Contract: `start → token* → (end | error)`.
+
+    - event `error` = `{"type": "error", "error": {code, message, request_id}}` (cùng schema `/chat`);
+    - heartbeat comment `: ping` nếu quá `SSE_HEARTBEAT_SECONDS` không có token;
+    - header chống buffer của proxy (`X-Accel-Buffering: no`) + `Cache-Control: no-cache`;
+    - client disconnect ⇒ generator dừng sạch (lưu partial answer, xem `ChatService.stream_chat`).
     """
+    request_id = get_request_id(http_request)
+    settings = get_settings()
 
-    async def event_generator():
-        async for event in service.stream_chat(
-                message=request.message,
-                conversation_id=request.conversation_id,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
-        ):
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+    events = service.stream_chat(
+        message=payload.message,
+        conversation_id=payload.conversation_id,
+        max_tokens=payload.max_tokens,
+        temperature=payload.temperature,
+        request_id=request_id,
+    )
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        sse_event_stream(events, request_id=request_id, heartbeat_seconds=settings.sse_heartbeat_seconds),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
 
 
 @app.get("/documents/status")
