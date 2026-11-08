@@ -205,6 +205,14 @@ export default function ChatPage() {
         await submitQuestion(retryText, {appendUserMessage: false});
     };
 
+    /**
+     * Bấm chip `[S#]` trong câu trả lời (KB-4.2). KB-4.3 sẽ nối vào panel nguồn
+     * (scroll + highlight); hiện chỉ ghi log để verify + làm điểm nối.
+     */
+    const handleCitationClick = (citationId: string) => {
+        console.debug('[citation] clicked', citationId);
+    };
+
 
     const handleSelectSession = (sessionId: string) => {
         // Save current messages to history before switching
@@ -396,6 +404,7 @@ export default function ChatPage() {
                                                 isStreaming={message.isStreaming}
                                                 citations={message.citations}
                                                 isUser={message.role === 'user'}
+                                                onCitationClick={handleCitationClick}
                                             />
                                         </div>
 
