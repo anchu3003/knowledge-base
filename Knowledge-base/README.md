@@ -278,11 +278,13 @@ Kết quả in ra bảng markdown + snapshot JSON ở `eval/runs/`.
 | `dup_ratio` | tỉ lệ cặp chunk trong top-k gần trùng (Jaccard shingle 3-gram >= 0.8) | retrieval |
 | `distinct_file_ratio` | tỉ lệ file khác nhau trong top-k (1.0 = không lặp file; 0.2 = 5 hit cùng 1 file) | retrieval |
 | `latency_p50` | trung vị thời gian 1 query (giây) | cả hai |
-| `citation_presence` | tỉ lệ câu trả lời có nhãn `[S1]`, `[S2]`, … | full |
+| `citation_presence` | tỉ lệ câu trả lời có nhãn `[S1]`, `[S2]`, … (bất kỳ đâu) | full |
+| `inline_citation_presence` | tỉ lệ câu trả lời có nhãn **trong thân bài** (không chỉ dòng `Nguồn:` cuối) | full |
 | `answer_keyword_hit` | tỉ lệ câu trả lời chứa keyword kỳ vọng | full |
 
 Flag hữu ích: `--limit N` (chạy thử N câu), `--k N` (override `RETRIEVAL_K`),
-`--rerank {env,on,off}` (override `ENABLE_RERANK`), `--tag` (nhãn snapshot).
+`--rerank {env,on,off}` (override `ENABLE_RERANK`), `--sleep N` (nghỉ giữa các câu ở `--mode full`
+để không bị Groq `429` TPM), `--tag` (nhãn snapshot).
 
 > Lưu ý PII: `--mode full` gửi câu hỏi + context lên LLM provider. Context đi qua `PIIRedactor`
 > trước khi ra ngoài, nhưng tài liệu vẫn là note cá nhân → cân nhắc trước khi chạy.

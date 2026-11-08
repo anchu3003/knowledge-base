@@ -115,6 +115,19 @@ def keyword_hit(answer: str, keywords: List[str]) -> bool:
     return any(kw.lower() in lowered for kw in keywords)
 
 
+def has_inline_citation(answer: str) -> bool:
+    """True nếu nhãn `[S#]` nằm trong **thân** câu trả lời (không chỉ ở dòng `Nguồn:` cuối).
+
+    Yêu cầu của KB-2.3 Q1 là **inline** — nhãn ngay sau ý được trích. Model hay "đối phó" bằng
+    cách dồn hết nhãn xuống dòng cuối, nên phải đo riêng để không tự lừa mình.
+    """
+    body_lines = [
+        line for line in (answer or "").splitlines()
+        if not line.strip().lower().startswith("nguồn")
+    ]
+    return bool(CITATION_RE.search("\n".join(body_lines)))
+
+
 # -----------------------------
 # Service wiring
 # -----------------------------
@@ -172,12 +185,15 @@ async def run_retrieval(settings, service, items: List[Dict[str, Any]]) -> List[
     return rows
 
 
-async def run_full(settings, service, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+async def run_full(settings, service, items: List[Dict[str, Any]], pause_seconds: float = 0.0) -> List[Dict[str, Any]]:
     from app.services.chat_service import ChatService
 
     chat = ChatService(settings, service)
     rows: List[Dict[str, Any]] = []
-    for item in items:
+    for position, item in enumerate(items):
+        if pause_seconds and position:
+            # Groq free tier giới hạn TPM (8000) ⇒ nghỉ giữa các câu để không bị 429 hàng loạt
+            await asyncio.sleep(pause_seconds)
         t0 = time.perf_counter()
         try:
             result = await chat.chat(message=item["question"])
@@ -191,10 +207,12 @@ async def run_full(settings, service, items: List[Dict[str, Any]]) -> List[Dict[
 
         latency = time.perf_counter() - t0
         cited = bool(CITATION_RE.search(answer))
+        inline_cited = has_inline_citation(answer)
         kw_hit = keyword_hit(answer, item.get("expected_keywords", []))
         rows.append({
             "id": item["id"],
             "citation_present": cited,
+            "inline_citation_present": inline_cited,
             "answer_keyword_hit": kw_hit,
             "sources": len(sources),
             "answer_chars": len(answer),
@@ -230,6 +248,7 @@ def summarize_full(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "questions": len(rows),
         "errors": len(rows) - len(ok),
         "citation_presence": round(sum(1 for r in ok if r["citation_present"]) / len(ok), 3) if ok else 0.0,
+        "inline_citation_presence": round(sum(1 for r in ok if r["inline_citation_present"]) / len(ok), 3) if ok else 0.0,
         "answer_keyword_hit": round(sum(1 for r in ok if r["answer_keyword_hit"]) / len(ok), 3) if ok else 0.0,
         "latency_p50": round(statistics.median([r["latency"] for r in ok]), 3) if ok else 0.0,
     }
@@ -271,6 +290,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         help="override ENABLE_RERANK (env = giữ nguyên theo .env)")
     parser.add_argument("--build-index", action="store_true",
                         help="clear collection + index lại DOCUMENTS_FOLDER trước khi đo")
+    parser.add_argument("--sleep", type=float, default=0.0,
+                        help="nghỉ N giây giữa các câu ở --mode full (tránh 429 TPM của free tier)")
     return parser.parse_args(argv)
 
 
@@ -312,7 +333,7 @@ async def main_async(args: argparse.Namespace) -> int:
         rows = await run_retrieval(settings, service, items)
         summary = summarize_retrieval(rows)
     else:
-        rows = await run_full(settings, service, items)
+        rows = await run_full(settings, service, items, pause_seconds=args.sleep)
         summary = summarize_full(rows)
 
     print_summary(summary, meta)

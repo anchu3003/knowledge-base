@@ -430,17 +430,36 @@ class ChatService:
             logger.warning(f"Query rewrite failed: {e}")
             return original_query
 
-    @staticmethod
-    def build_context(similar_docs: List[Dict[str, Any]]) -> str:
-        """Build context string from retrieved documents."""
+    def build_context(self, similar_docs: List[Dict[str, Any]], max_chars: Optional[int] = None) -> str:
+        """Build context string with citation labels `[S1]`, `[S2]`, … (KB-2.3).
+
+        - Nhãn `[S{i}]` map 1-1 với `sources[i]["citation_id"]` trả về cho client.
+        - **Không** cắt cứng mỗi chunk 500 ký tự như bản cũ (mất nửa bằng chứng với `chunk_size=1000`);
+          cắt theo **budget tổng** `CONTEXT_MAX_CHARS` (chunk điểm cao được ưu tiên vì `similar_docs`
+          đã sort theo score).
+        """
         if not similar_docs:
             return "No relevant documents found."
 
-        context_parts = []
-        for i, doc in enumerate(similar_docs, 1):
-            source = doc["metadata"].get("source", "Unknown")
-            content = doc["content"][:500]  # limit content length
-            context_parts.append(f"Document {i} (from {source}):\n{content}\n")
+        budget = max_chars if max_chars is not None else getattr(self.settings, "context_max_chars", 6000)
+
+        context_parts: List[str] = []
+        used = 0
+        for index, doc in enumerate(similar_docs, 1):
+            remaining = budget - used
+            if remaining <= 0:
+                logger.info(
+                    f"Context budget {budget} chars reached; dropped {len(similar_docs) - index + 1} source(s)."
+                )
+                break
+
+            metadata = doc.get("metadata") or {}
+            name = metadata.get("file_name") or metadata.get("source", "Unknown")
+            heading = metadata.get("heading_path") or ""
+            label = f"[S{index}] {name}" + (f" — {heading}" if heading else "")
+            content = (doc.get("content") or "")[:remaining]
+            context_parts.append(f"{label}:\n{content}\n")
+            used += len(content)
 
         return "\n---\n".join(context_parts)
 
@@ -465,42 +484,28 @@ class ChatService:
         # Built-in default prompt
         return (
             "\n"
-            "        You are an expert AI onboarding assistant for the **RAG Chatbot API** project - a FastAPI-based system using Retrieval-Augmented Generation to answer questions from project documents. Your mission is to help new team members understand and contribute to this project quickly, reducing mentor workload by 80%+.\n"
+            "        You are an expert AI assistant for my **personal knowledge base** (software engineering, interview prep, English learning).\n"
+            "        Answer from the retrieved context below and cite its labels.\n"
             "        ═══════════════════════════════════════════════════════════════════\n"
-            "        RELEVANT CONTEXT FROM PROJECT DOCUMENTS:\n"
+            "        RETRIEVED CONTEXT FROM MY KNOWLEDGE BASE (mỗi block có nhãn [S1], [S2], ...):\n"
             "        ═══════════════════════════════════════════════════════════════════\n"
             f"        {context}\n\n"
             "        ═══════════════════════════════════════════════════════════════════\n"
             "        RESPONSE BEST PRACTICES:\n"
             "        ═══════════════════════════════════════════════════════════════════\n\n"
-            "        1. **Always reference file paths** from the context when available\n"
-            "        2. **Show concrete code examples** with line numbers\n"
-            "        3. **Explain technical terms** (RAG, embeddings, vector search, chunking)\n"
-            "        4. **Provide step-by-step instructions** for setup/deployment tasks\n"
-            "        5. **Link related concepts**: \"When you modify document_service.py, also check chat_service.py\"\n"
-            "        6. **Anticipate follow-up questions**: \"Next, you might want to know about...\"\n"
-            "        7. **Cite sources** at the end: \"*Reference: app/main.py:45-67, documents/Architecture.md*\"\n"
-            "        8. **Use Vietnamese** for explanations if context suggests Vietnamese docs\n"
-            "        9. **Highlight common pitfalls**: Missing .env, wrong Docker port, ChromaDB path issues\n"
-            "        10. **Be encouraging**: \"Great question! This is a key concept in RAG systems...\"\n"
-            "        11. Decline to answer any request involving violence, weapons, self-harm, abuse, explicit content, or illegal activity.\n"
-            "        12. Only respond with information directly connected to the user’s question.\n"
-            "        13. Avoid unnecessary details, speculation, or hallucinated facts.\n"
-            "        14. If the question lacks context, ask briefly for clarification.\n"
+            "        1. **Cite every claim** with its context label: [S1], [S2], ... (chỉ dùng nhãn có trong context)\n"
+            "        2. Nhiều block cùng chứng minh một ý thì ghi liền: [S1][S3]\n"
+            "        3. Never invent labels, line numbers, or file paths that are not in the context\n"
+            "        4. Context không chứa thông tin ⇒ nói rõ \"Thông tin này không có trong knowledge base\"\n"
+            "        5. Explain technical terms briefly; use Vietnamese if the question/context is Vietnamese\n"
+            "        6. Keep answers concise, structured, and free of speculation\n"
+            "        7. End the answer with a line `Nguồn: [S1], [S2]` listing the labels actually used\n"
+            "        8. Decline to answer any request involving violence, weapons, self-harm, abuse, explicit content, or illegal activity.\n"
+            "        9. Only respond with information directly connected to the user’s question.\n"
+            "        10. Avoid unnecessary details, speculation, or hallucinated facts.\n"
+            "        11. If the question lacks context, ask briefly for clarification.\n"
             "        ═══════════════════════════════════════════════════════════════════\n"
-            "        YOUR ULTIMATE GOAL:\n"
-            "        ═══════════════════════════════════════════════════════════════════\n\n"
-            "        Make new developers **productive in 30 minutes instead of 3 days**. Answer questions that would typically require:\n"
-            "        - 2-3 hours of senior developer time\n"
-            "        - Reading through multiple documentation files\n"
-            "        - Trial-and-error experimentation\n"
-            "        - Understanding complex RAG/LLM concepts\n\n"
-            "        You are the **first line of support** - only escalate to human mentors when:\n"
-            "        - Bug in production code that needs immediate fix\n"
-            "        - Architecture decisions requiring team discussion\n"
-            "        - Access/permission issues\n"
-            "        - Information truly not available in project docs\n\n"
-            "        **Remember:** You have deep knowledge of this specific RAG Chatbot API project. Use it fully!\n"
+            "        YOUR GOAL: help me recall and apply what is in my own notes, accurately and with traceable citations.\n"
             "        "
         )
 
@@ -576,20 +581,25 @@ class ChatService:
 
     @staticmethod
     def _format_sources(similar_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Format source documents for response."""
+        """Format source documents for response (KB-2.3: thêm citation_id/chunk_id/snippet).
+
+        Field cũ (`file_path`, `file_name`, `file_type`, `relevance_score`, `content_preview`) được
+        giữ nguyên để FE hiện tại không vỡ; các field mới là **additive**.
+        """
         sources = []
-        for doc in similar_docs:
-            metadata = doc.get("metadata", {})
+        for index, doc in enumerate(similar_docs, 1):
+            metadata = doc.get("metadata") or {}
+            content = doc.get("content", "")
             sources.append({
+                "citation_id": f"S{index}",
+                "chunk_id": doc.get("chunk_id") or metadata.get("chunk_id"),
                 "file_path": metadata.get("source", "Unknown"),
                 "file_name": metadata.get("file_name", "Unknown"),
                 "file_type": metadata.get("file_type", "Unknown"),
+                "heading_path": metadata.get("heading_path", ""),
                 "relevance_score": round(doc.get("score", 0.0), 3),
-                "content_preview": (
-                    doc["content"][:200] + "..."
-                    if len(doc.get("content", "")) > 200
-                    else doc.get("content", "")
-                )
+                "snippet": content[:400],
+                "content_preview": content[:200] + "..." if len(content) > 200 else content,
             })
         return sources
 

@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     # Path to the query rewrite system prompt. No placeholders required.
     rewrite_system_prompt_path: str = Field(default="./prompts/rewrite_system_prompt.txt",
                                             alias="REWRITE_SYSTEM_PROMPT_PATH")
+    # Tổng budget ký tự của context đưa vào prompt (KB-2.3). Cắt theo budget tổng thay vì
+    # cắt cứng 500 ký tự/chunk (bản cũ làm mất nửa bằng chứng với chunk_size=1000).
+    context_max_chars: int = Field(default=6000, alias="CONTEXT_MAX_CHARS")
 
     # PII / secret redaction (see .clinerules/30-pii-safety.md)
     enable_pii_redaction: bool = Field(default=True, alias="ENABLE_PII_REDACTION")
