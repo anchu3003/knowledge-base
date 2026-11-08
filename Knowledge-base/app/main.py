@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Suppress ChromaDB telemetry warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*telemetry.*")
@@ -18,6 +20,14 @@ logging.getLogger("chromadb").setLevel(logging.ERROR)
 logging.getLogger("chromadb.telemetry").setLevel(logging.ERROR)
 
 from app.core.config import get_settings
+from app.core.errors import (
+    AppError,
+    DocumentStoreError,
+    ServiceUnavailableError,
+    error_body,
+    http_status_error,
+)
+from app.core.middleware import RequestIDMiddleware, get_request_id
 from app.services.document_service import DocumentService
 from app.services.chat_service import ChatService
 from app.models.schemas import (
@@ -113,25 +123,94 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all HTTP headers
 )
 
+# request_id cho mọi request (KB-3.1): thêm SAU CORS để middleware này là lớp ngoài cùng
+# ⇒ response lỗi (kể cả 500 của ServerErrorMiddleware) vẫn có header X-Request-ID.
+app.add_middleware(RequestIDMiddleware)
+
+logger = logging.getLogger(__name__)
+
+
+# ------------------------------
+# Global error handlers (KB-3.1)
+# ------------------------------
+# Contract lỗi duy nhất: {"error": {"code", "message", "request_id"}}.
+# Chi tiết nội bộ (`str(e)`, host provider, path, traceback) **chỉ** vào log, không ra response.
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    """Serialize `AppError` (taxonomy của service) thành response lỗi chuẩn."""
+    request_id = get_request_id(request)
+    if exc.http_status >= 500:
+        logger.error(
+            "request_id=%s code=%s status=%s internal=%s",
+            request_id, exc.code, exc.http_status, exc.internal_detail, exc_info=True,
+        )
+    else:
+        logger.warning(
+            "request_id=%s code=%s status=%s internal=%s",
+            request_id, exc.code, exc.http_status, exc.internal_detail,
+        )
+    return JSONResponse(
+        status_code=exc.http_status,
+        content=error_body(exc.code, exc.public_message, request_id),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """422 cùng envelope; chỉ trả `loc` + `msg`, **không** echo lại giá trị client gửi."""
+    request_id = get_request_id(request)
+    details = [
+        {
+            "loc": ".".join(str(part) for part in error.get("loc", ())),
+            "msg": error.get("msg", "Invalid value."),
+            "type": error.get("type", "value_error"),
+        }
+        for error in exc.errors()
+    ]
+    logger.warning("request_id=%s code=validation_error errors=%s", request_id, len(details))
+    body = error_body("validation_error", "Request body is invalid.", request_id)
+    body["error"]["details"] = details
+    return JSONResponse(status_code=422, content=body)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """404/405… do framework raise cũng dùng envelope lỗi chung (không để `{"detail"}` lẻ)."""
+    request_id = get_request_id(request)
+    mapped = http_status_error(exc.status_code, internal_detail=str(exc.detail))
+    logger.warning("request_id=%s code=%s status=%s", request_id, mapped.code, mapped.http_status)
+    return JSONResponse(
+        status_code=mapped.http_status,
+        content=error_body(mapped.code, mapped.public_message, request_id),
+        headers=getattr(exc, "headers", None),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Fallback 500: log stack kèm request_id, client chỉ nhận `internal_error`."""
+    request_id = get_request_id(request)
+    logger.error(
+        "request_id=%s code=internal_error unhandled=%s", request_id, type(exc).__name__, exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content=error_body("internal_error", "Internal server error.", request_id),
+    )
+
 
 # Dependency injection for FastAPI
 def get_document_service() -> DocumentService:
     """Dependency to get document service"""
     if document_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document service not initialized"
-        )
+        raise ServiceUnavailableError("document_service is not initialized")
     return document_service
 
 
 def get_chat_service() -> ChatService:
     """Dependency to get chat service"""
     if chat_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Chat service not initialized"
-        )
+        raise ServiceUnavailableError("chat_service is not initialized")
     return chat_service
 
 
@@ -168,11 +247,10 @@ async def refresh_documents(
             details=result.get("details", [])
         )
 
+    except AppError:
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error refreshing documents: {str(e)}"
-        )
+        raise DocumentStoreError(f"refresh_documents: {type(e).__name__}: {e}") from e
 
 
 @app.get("/documents/folder-info")
@@ -219,11 +297,10 @@ async def get_documents_folder_info():
             "auto_load_enabled": settings.auto_load_on_startup
         }
 
+    except AppError:
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get folder info: {str(e)}"
-        )
+        raise AppError(f"folder_info: {type(e).__name__}: {e}") from e
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -235,26 +312,19 @@ async def chat(
     Chat with the RAG system about the uploaded documents.
     The system will retrieve relevant context and generate responses.
     """
-    try:
-        response = await service.chat(
-            message=request.message,
-            conversation_id=request.conversation_id,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature
-        )
+    response = await service.chat(
+        message=request.message,
+        conversation_id=request.conversation_id,
+        max_tokens=request.max_tokens,
+        temperature=request.temperature
+    )
 
-        return ChatResponse(
-            response=response["answer"],
-            conversation_id=response["conversation_id"],
-            sources=response.get("sources", []),
-            metadata=response.get("metadata", {})
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Chat failed: {str(e)}"
-        )
+    return ChatResponse(
+        response=response["answer"],
+        conversation_id=response["conversation_id"],
+        sources=response.get("sources", []),
+        metadata=response.get("metadata", {})
+    )
 
 
 @app.post("/chat/stream")
@@ -287,11 +357,10 @@ async def get_document_status(
     try:
         status_info = await service.get_status()
         return JSONResponse(content=status_info)
+    except AppError:
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get status: {str(e)}"
-        )
+        raise DocumentStoreError(f"get_status: {type(e).__name__}: {e}") from e
 
 
 @app.delete("/documents/clear")
@@ -302,11 +371,10 @@ async def clear_documents(
     try:
         await service.clear_database()
         return JSONResponse(content={"message": "Document database cleared successfully"})
+    except AppError:
+        raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to clear database: {str(e)}"
-        )
+        raise DocumentStoreError(f"clear_database: {type(e).__name__}: {e}") from e
 
 
 if __name__ == "__main__":

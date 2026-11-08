@@ -6,9 +6,9 @@ from typing import Dict, Any, List, Optional, AsyncIterator
 from langchain_core.messages import (
     HumanMessage, AIMessage, SystemMessage)
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
-from openai import APIError, APIConnectionError, AuthenticationError, RateLimitError
 
 from app.core.config import Settings
+from app.core.errors import AppError, map_provider_error
 from app.services.document_service import DocumentService
 from app.services.pii_service import PIIRedactor, summarize_pii_stats
 
@@ -195,22 +195,14 @@ class ChatService:
                 }
             }
 
-        except (APIConnectionError, ConnectionError) as e:
-            error_msg = f"Connection error: Unable to connect to OpenAI/Azure endpoint. Please check your network connection and endpoint URL ({self.settings.openai_base_url or 'default'})."
-            logger.error(f"{error_msg} Details: {str(e)}")
-            raise ConnectionError(error_msg) from e
-        except AuthenticationError as e:
-            error_msg = f"Authentication error: Invalid API key or credentials. Please check your OPENAI_API_KEY."
-            logger.error(f"{error_msg} Details: {str(e)}")
-            raise ValueError(error_msg) from e
-        except RateLimitError as e:
-            error_msg = f"Rate limit exceeded: Too many requests. Please try again later."
-            logger.error(f"{error_msg} Details: {str(e)}")
-            raise ValueError(error_msg) from e
-        except APIError as e:
-            error_msg = f"API error: {str(e)}"
-            logger.error(f"{error_msg} Details: {str(e)}")
-            raise RuntimeError(error_msg) from e
+        except AppError:
+            raise
+        except Exception as e:
+            # Map lỗi SDK/provider sang taxonomy dùng chung (KB-3.1); lỗi lạ → 500 internal_error.
+            # Client chỉ nhận code + message chung; chi tiết gốc đi vào log qua `internal_detail`.
+            mapped = map_provider_error(e)
+            logger.error("chat failed: code=%s detail=%s", mapped.code, mapped.internal_detail)
+            raise mapped from e
 
     async def stream_chat(
             self,
@@ -349,33 +341,16 @@ class ChatService:
                 }
             }
 
-        except (APIConnectionError, ConnectionError) as e:
-            error_msg = (
-                f"Connection error: Unable to connect to OpenAI/Azure endpoint. "
-                f"Please check your network connection and endpoint URL "
-                f"({self.settings.openai_base_url or 'default'})."
-            )
-            logger.error(f"{error_msg} Details: {str(e)}")
-            yield {"type": "error", "message": error_msg}
-        except AuthenticationError as e:
-            error_msg = (
-                "Authentication error: Invalid API key or credentials. "
-                "Please check your OPENAI_API_KEY."
-            )
-            logger.error(f"{error_msg} Details: {str(e)}")
-            yield {"type": "error", "message": error_msg}
-        except RateLimitError as e:
-            error_msg = "Rate limit exceeded: Too many requests. Please try again later."
-            logger.error(f"{error_msg} Details: {str(e)}")
-            yield {"type": "error", "message": error_msg}
-        except APIError as e:
-            error_msg = f"API error: {str(e)}"
-            logger.error(f"{error_msg} Details: {str(e)}")
-            yield {"type": "error", "message": error_msg}
+        except AppError as e:
+            # SSE: event `error` có `code` hằng số + message chung (KB-3.3 sẽ thêm `request_id`).
+            logger.error("stream_chat failed: code=%s detail=%s", e.code, e.internal_detail)
+            yield {"type": "error", "code": e.code, "message": e.public_message}
         except Exception as e:
-            error_msg = f"Unexpected error during chat (stream): {str(e)}"
-            logger.error(f"{error_msg}", exc_info=True)
-            yield {"type": "error", "message": error_msg}
+            mapped = map_provider_error(e)
+            logger.error(
+                "stream_chat failed: code=%s detail=%s", mapped.code, mapped.internal_detail, exc_info=True,
+            )
+            yield {"type": "error", "code": mapped.code, "message": mapped.public_message}
 
     async def _rewrite_query(self, original_query: str) -> str:
         """Use the LLM to rewrite the user query to improve retrieval.
