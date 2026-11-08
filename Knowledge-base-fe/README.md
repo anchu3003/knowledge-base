@@ -44,19 +44,46 @@ cd ../Knowledge-base && docker compose up -d --build && docker compose ps
 ## Test / Lint / Typecheck (KB-4.6)
 
 ```bash
-npm run test        # vitest run — 50 test, ~1.2s, KHÔNG cần BE/network (fetch được mock)
+npm run test        # vitest run — 91 test, ~1.5s, KHÔNG cần BE/network (fetch được mock)
 npm run test:watch  # vitest ở chế độ watch
+npm run test:e2e    # Playwright — UI thật trên `npm run dev` (:3000), tự bật dev server nếu chưa chạy
+npm run test:e2e:prod   # Playwright trên container/production build (:3010)
+npm run test:all    # vitest + Playwright
 npm run lint        # eslint . (flat config eslint-config-next, 0 error)
 npm run typecheck   # tsc --noEmit
 npm run build       # next build — CÓ type check thật (ignoreBuildErrors: false)
 ```
 
 - Test nằm trong `tests/` (jsdom + `@testing-library/react`), setup chung `tests/setup.ts`
-  (stub `scrollIntoView`/`clipboard` vì jsdom không có). Alias `@/` khai báo trong `vitest.config.ts`.
-- Phạm vi: `lib/api.ts` (error envelope + `/ready` 503 + streaming), `lib/sse.ts` (parser + abort),
-  `lib/errors.ts` (code → message), `markdown-message` (code block/table/chip/XSS thành text),
-  `sources-panel` (3 chunk cùng file → 3 card, highlight), `documents-panel` (badge lỗi, gating `CLEAR`).
-- **Chưa có CI/CD** ⇒ 4 lệnh trên là bộ verify tay trước khi merge MR.
+  (stub `scrollIntoView`/`clipboard`/`matchMedia`/`ResizeObserver`/`localStorage` vì jsdom thiếu).
+- Phạm vi unit: `lib/api.ts` (error envelope + `/ready` 503 + streaming), `lib/sse.ts` (parser + abort),
+  `lib/errors.ts` (code → message), `lib/theme.ts` (light/dark/system), `lib/chat-store.ts` (persist),
+  `markdown-message`, `sources-panel`, `documents-panel` (gating `CLEAR`/Refresh), `theme-toggle`, `shell`.
+- **Chưa có CI/CD** ⇒ các lệnh trên là bộ verify tay trước khi merge MR.
+
+## Verify UI bằng Chromium thật — Playwright (KB-4.9)
+
+Unit test không thấy layout/thẩm mỹ ⇒ có thêm `e2e/ui.spec.ts` chạy **Chromium thật trong WSL**
+(0 dependency ngoài `@playwright/test`, **không cần sudo**, không cần Docker).
+
+```bash
+bash tools/setup-playwright.sh          # 1 lần: tải lib X11 còn thiếu (không root) + Chromium
+npm run test:e2e                        # ~5s cho 7 check, tự bật `npm run dev`
+```
+
+| Check | Nội dung |
+|---|---|
+| Shell | header brand, **đúng 1 nút "Kho tài liệu"**, có theme toggle |
+| Responsive | 720px: sidebar ẩn + hamburger + không tràn ngang |
+| Theme | sáng → tối: `.dark` + `color-scheme` + `localStorage['kb.theme']` |
+| Lịch sử | seed `localStorage` rồi reload: message + tiêu đề session còn, markdown render |
+| Sheet | `role=dialog`, focus nằm trong sheet, ESC đóng |
+| Panel Nguồn | path/snippet dài (kể cả token không dấu cách) **không được rộng hơn cột chat** |
+| 1900px | cửa sổ rộng vẫn không tràn ngang |
+
+Ảnh chụp: `test-results/shot-*.png` (light/dark/sheet/nguồn/720/1900) ⇒ dùng để tự review thẩm mỹ.
+**Quy ước vòng lặp**: sửa UI → `npm run test:e2e` (dev, ~1–3s/vòng). Docker build **chỉ** khi cần production
+parity hoặc cuối ticket (`npm run test:e2e:prod`).
 
 ## Kho tài liệu & readiness (KB-4.5)
 
