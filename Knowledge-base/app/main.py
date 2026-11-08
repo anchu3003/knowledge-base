@@ -119,9 +119,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
-origins = [
-    "http://localhost:3000"
-]
+origins = [origin.strip() for origin in get_settings().allowed_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  # List of allowed origins

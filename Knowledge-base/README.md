@@ -28,7 +28,8 @@ This README consolidates the current, working setup based on the repository sour
 
 ## Quickstart (Docker Compose)
 
-Sau **KB-4.7**, `docker compose up` chạy **2 service**: `chatbot-api` (BE :8000) + `chatbot-ui` (FE :3000).
+Sau **KB-4.7**, `docker compose up` chạy **2 service**: `chatbot-api` (BE host **8010** → container 8000) +
+`chatbot-ui` (FE host **3010** → container 3000). Port dời để không trùng project khác (vd shoplab đang dùng 8080-8088).
 
 1) Copy `.env.example` to `.env` and update values.
 
@@ -36,7 +37,7 @@ Sau **KB-4.7**, `docker compose up` chạy **2 service**: `chatbot-api` (BE :800
 
 ```bash
 # mặc định http://localhost:8000 (browser trên máy host gọi BE)
-export NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000
+export NEXT_PUBLIC_API_PROXY_URL=http://localhost:8010
 # tắt streaming SSE khi build FE
 export NEXT_PUBLIC_STREAMING=false
 ```
@@ -50,13 +51,15 @@ docker compose ps            # cả 2 service phải "healthy"
 
 4) Mở:
 
-- FE: http://localhost:3000 (panel **Kho tài liệu** ở header để xem index/readiness)
-- API docs: http://localhost:8000/docs
+- FE: http://localhost:3010 (panel **Kho tài liệu** ở header để xem index/readiness)
+- API docs: http://localhost:8010/docs
 
 Ghi chú vận hành:
 
 - `chatbot-ui` **không** mount source nữa (image là thứ sẽ deploy); FE chờ BE `healthy` mới start
   (`depends_on: condition: service_healthy`).
+- **CORS**: BE chỉ cho origin trong env `ALLOWED_ORIGINS` (mặc định gồm 3000 và 3010) ⇒ đổi port FE phải cập nhật
+  biến này (hoặc export trước khi `up`).
 - `chatbot-api` chạy bằng **UID/GID của bạn** (`USER_ID`/`GROUP_ID`, mặc định `1000`) vì `./chroma_db` là bind mount
   của user trên host — nếu image chạy uid 10001 (mặc định trong Dockerfile) thì ChromaDB báo
   `attempt to write a readonly database`.
@@ -347,7 +350,7 @@ Notes:
 
 - Uvicorn (local): `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
 - Dockerfile entrypoint: Uvicorn command above
-- Docker Compose services (KB-4.7): `chatbot-api` (BE, `8000:8000`) + `chatbot-ui` (FE, `3000:3000`)
+- Docker Compose services (KB-4.7): `chatbot-api` (BE, `8010:8000`) + `chatbot-ui` (FE, `3010:3000`)
   - BE volumes: `./chroma_db:/app/chroma_db`, `hf-cache:/hf-cache` (named volume, chứa model HF)
   - FE: build từ `../Knowledge-base-fe` với `build.args` (`NEXT_PUBLIC_API_PROXY_URL`, `NEXT_PUBLIC_STREAMING`),
     **không** mount source, `depends_on: chatbot-api (service_healthy)`

@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     documents_folder: str = Field(default="Interview", alias="DOCUMENTS_FOLDER")
     auto_load_on_startup: bool = Field(default=True, alias="AUTO_LOAD_ON_STARTUP")
 
+    # CORS (KB-4.7): danh sách origin của FE, phân tách bằng dấu phẩy.
+    # Mặc định gồm port dev 3000 và port compose 3010 (dời port để không trùng project khác).
+    allowed_origins: str = Field(
+        default="http://localhost:3000,http://localhost:3010,http://127.0.0.1:3000,http://127.0.0.1:3010",
+        alias="ALLOWED_ORIGINS",
+    )
+
     # RAG Settings
     # RETRIEVAL_K=3: chốt bằng số đo KB-2.5 (grid 10 cấu hình) — precision@k 0.533 vs 0.347 ở k=5,
     # `MRR` 1.0 giữ nguyên, `distinct_file_ratio` 0.756 (tốt nhất trong nhóm rerank on).
