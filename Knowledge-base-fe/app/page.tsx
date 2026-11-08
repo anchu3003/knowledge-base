@@ -5,6 +5,7 @@ import {Button} from '@/components/ui/button';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {AppHeader} from '@/components/app-header';
 import {MessageWithCitations} from '@/components/message-with-citations';
+import {SourcesPanel} from '@/components/sources-panel';
 import {PiiBadge} from '@/components/pii-badge';
 import {ChatHistorySidebar} from '@/components/chat-history-sidebar';
 import {ApiError, postChat} from '@/lib/api';
@@ -34,6 +35,14 @@ interface ChatSession {
     title: string;
     createdAt: Date;
     messageCount: number;
+}
+
+/** Chip `[S#]` vừa được bấm — dùng để panel nguồn scroll + highlight (KB-4.3). */
+interface CitationFocus {
+    messageId: string;
+    citationId: string;
+    /** Tăng sau mỗi lần bấm ⇒ bấm lại cùng chip vẫn highlight lại. */
+    nonce: number;
 }
 
 export default function ChatPage() {
@@ -71,6 +80,8 @@ export default function ChatPage() {
     const [retryText, setRetryText] = useState<string | null>(null);
     // `conversation_id` của BE, giữ qua reload bằng localStorage (Q&A KB-4.1)
     const [conversationId, setConversationId] = useState<string | null>(null);
+    // KB-4.3: chip `[S#]` nào vừa được bấm ⇒ panel nguồn của message đó scroll + highlight card
+    const [citationFocus, setCitationFocus] = useState<CitationFocus | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll to bottom when messages change
@@ -167,14 +178,9 @@ export default function ChatPage() {
                 setConversationId(data.conversation_id);
             }
 
-            // TD-12 (bỏ dedup theo file_path) được xử lý ở KB-4.3
-            const uniqueSources: ChatSource[] = data.sources
-                ? (Array.from(
-                    new Map(
-                        data.sources.map((source) => [source.file_path, source])
-                    ).values()
-                ) as ChatSource[])
-                : [];
+            // KB-4.3: KHÔNG dedup theo `file_path` nữa — mỗi phần tử `sources[]` là 1 chunk với
+            // `citation_id` riêng (`[S1]`, `[S2]`, …) ⇒ panel nguồn hiện đủ, chip `[S#]` trỏ đúng card (trả TD-12).
+            const sources: ChatSource[] = data.sources ?? [];
 
             setMessages((prev) => [
                 ...prev,
@@ -182,7 +188,7 @@ export default function ChatPage() {
                     id: (Date.now() + 1).toString(),
                     role: 'assistant',
                     content: data.response || '',
-                    sources: uniqueSources,
+                    sources,
                     metadata: data.metadata,
                 },
             ]);
@@ -206,11 +212,15 @@ export default function ChatPage() {
     };
 
     /**
-     * Bấm chip `[S#]` trong câu trả lời (KB-4.2). KB-4.3 sẽ nối vào panel nguồn
-     * (scroll + highlight); hiện chỉ ghi log để verify + làm điểm nối.
+     * Bấm chip `[S#]` trong câu trả lời (KB-4.2) → panel nguồn scroll + highlight đúng card (KB-4.3).
+     * Cần `messageId` vì mỗi câu trả lời có panel riêng; `nonce` để bấm lại cùng chip vẫn highlight lại.
      */
-    const handleCitationClick = (citationId: string) => {
-        console.debug('[citation] clicked', citationId);
+    const handleCitationClick = (messageId: string, citationId: string) => {
+        setCitationFocus((prev) => ({
+            messageId,
+            citationId,
+            nonce: (prev?.nonce ?? 0) + 1,
+        }));
     };
 
 
@@ -404,103 +414,28 @@ export default function ChatPage() {
                                                 isStreaming={message.isStreaming}
                                                 citations={message.citations}
                                                 isUser={message.role === 'user'}
-                                                onCitationClick={handleCitationClick}
+                                                onCitationClick={(citationId) =>
+                                                    handleCitationClick(message.id, citationId)
+                                                }
                                             />
                                         </div>
 
-                                        {/* Sources Section */}
+                                        {/* Sources Section — KB-4.3: 1 card / chunk, không dedup */}
                                         {message.sources && message.sources.length > 0 && (
-                                            <div className="mt-4 space-y-2">
-                                                <div
-                                                    className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                                    <svg
-                                                        className="h-4 w-4"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        stroke="currentColor"
-                                                    >
-                                                        <path
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            strokeWidth={2}
-                                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                                        />
-                                                    </svg>
-                                                    <span>Sources ({message.sources.length})</span>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {message.sources.map((source, idx) => (
-                                                        <div
-                                                            key={idx}
-                                                            className="group relative rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 shadow-sm hover:shadow-md transition-all cursor-pointer"
-                                                        >
-                                                            <div className="flex items-start gap-3">
-                                                                {/* File Icon */}
-                                                                <div
-                                                                    className="flex-shrink-0 h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500/10 to-purple-500/10 flex items-center justify-center">
-                                                                    <svg
-                                                                        className="h-5 w-5 text-violet-600 dark:text-violet-400"
-                                                                        fill="none"
-                                                                        viewBox="0 0 24 24"
-                                                                        stroke="currentColor"
-                                                                    >
-                                                                        <path
-                                                                            strokeLinecap="round"
-                                                                            strokeLinejoin="round"
-                                                                            strokeWidth={2}
-                                                                            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                                                                        />
-                                                                    </svg>
-                                                                </div>
-
-                                                                <div className="flex-1 min-w-0">
-                                                                    {/* File Name */}
-                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                                                                            {source.file_name}
-                                                                        </h4>
-                                                                        <span
-                                                                            className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">
-                                                                            {source.file_type}
-                                                                        </span>
-                                                                    </div>
-
-                                                                    {/* File Path */}
-                                                                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-2 truncate">
-                                                                        {source.file_path}
-                                                                    </p>
-
-                                                                    {/* Content Preview */}
-                                                                    {/*<p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-2">*/}
-                                                                    {/*    {source.content_preview}*/}
-                                                                    {/*</p>*/}
-
-                                                                    {/* Relevance Score */}
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="flex items-center gap-1">
-                                                                            <svg
-                                                                                className="h-3.5 w-3.5 text-amber-500"
-                                                                                fill="currentColor"
-                                                                                viewBox="0 0 20 20"
-                                                                            >
-                                                                                <path
-                                                                                    d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                                                                            </svg>
-                                                                            <span
-                                                                                className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                                                                                Relevance:{' '}
-                                                                                {Math.abs(
-                                                                                    source.relevance_score
-                                                                                ).toFixed(3)}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
+                                            <SourcesPanel
+                                                sources={message.sources}
+                                                metadata={message.metadata}
+                                                highlightCitationId={
+                                                    citationFocus?.messageId === message.id
+                                                        ? citationFocus.citationId
+                                                        : undefined
+                                                }
+                                                highlightNonce={
+                                                    citationFocus?.messageId === message.id
+                                                        ? citationFocus.nonce
+                                                        : undefined
+                                                }
+                                            />
                                         )}
                                     </div>
 

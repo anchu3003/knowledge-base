@@ -23,6 +23,15 @@ xem KB-4.7).
 - Nhãn `[S1]` → chip bấm được (`onCitationClick`), **trừ** khi nằm trong code fence/inline code.
   Việc nối chip → panel nguồn (scroll + highlight) ở **KB-4.3**.
 
+## Panel nguồn theo `citation_id` (KB-4.3)
+
+- `components/sources-panel.tsx`: **1 card / chunk** (không dedup theo `file_path` — trả TD-12), key React là
+  `citation_id` (`S1..Sk` do BE sinh theo từng response). Card hiện `[S1]` + `file_name` + `file_type` +
+  `chunk #<8 ký tự>` + `heading_path` (fallback `file_path`) + `snippet` (~400 ký tự rồi **Xem thêm**) + `score`.
+- Bấm chip `[S#]` trong câu trả lời ⇒ panel scroll card đó vào view + highlight ~2s
+  (`highlightCitationId` + `highlightNonce` truyền từ `page.tsx`).
+- Footer panel: `model` + `retrieved_documents`. `PiiBadge` giữ ở header message (KB-1.3) để không lặp icon.
+
 ## API client & hiển thị lỗi (KB-4.1)
 
 - Mọi call backend đi qua `lib/api.ts` (`apiFetch`, `postChat`) — **không** gọi `fetch` inline trong page.
