@@ -51,14 +51,20 @@ export function ChatComposer({
 
     return (
         <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur">
-            <div className="mx-auto w-full max-w-3xl px-3 py-3">
+            {/*
+              Canh mép (KB-4.9): cột chat là `max-w-3xl` + `px-3`, trong mỗi hàng message có avatar
+              (2.25rem) + gap (0.625rem) ⇒ bubble bị thụt vào 2.875rem mỗi bên.
+              Composer thêm đúng khoảng đó (`sm:`) để cạnh trái thẳng mép bubble AI và cạnh phải thẳng
+              mép bubble "Bạn" — dưới `sm` avatar bị ẩn nên không thêm.
+            */}
+            <div className="mx-auto w-full max-w-3xl px-3 py-2.5 sm:px-[calc(0.75rem_+_2.875rem)]">
                 {formError && (
                     <p role="alert" className="mb-2 text-sm text-destructive">
                         {formError}
                     </p>
                 )}
 
-                <div className="flex items-end gap-2">
+                <div data-testid="composer-row" className="flex items-end gap-2">
                     <textarea
                         value={value}
                         onChange={(event) => onChange(event.target.value)}
@@ -69,35 +75,35 @@ export function ChatComposer({
                                 if (canSend) onSend();
                             }
                         }}
-                        rows={2}
+                        rows={1}
                         placeholder="Hỏi gì đó về tài liệu của bạn… (Enter để gửi, Shift+Enter để xuống dòng)"
                         aria-label="Câu hỏi"
-                        className="max-h-40 min-h-11 flex-1 resize-y rounded-xl border border-border bg-card px-3 py-2.5 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                        className="max-h-40 min-h-9 flex-1 resize-none rounded-lg border border-border bg-card px-3 py-1.5 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                     />
                     {isLoading && streamingEnabled && onStop ? (
                         <Button
                             onClick={onStop}
-                            size="icon-lg"
+                            size="icon"
                             variant="destructive"
                             aria-label="Dừng trả lời"
-                            className="rounded-xl"
+                            className="rounded-lg"
                         >
-                            <Square className="size-4" fill="currentColor"/>
+                            <Square className="size-3.5" fill="currentColor"/>
                         </Button>
                     ) : (
                         <Button
                             onClick={onSend}
                             disabled={!canSend}
-                            size="icon-lg"
+                            size="icon"
                             aria-label="Gửi câu hỏi"
-                            className="rounded-xl"
+                            className="rounded-lg"
                         >
                             <ArrowUp className="size-4"/>
                         </Button>
                     )}
                 </div>
 
-                <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="mt-1.5 flex items-center justify-between gap-2">
                     <Button
                         variant="ghost"
                         size="sm"
