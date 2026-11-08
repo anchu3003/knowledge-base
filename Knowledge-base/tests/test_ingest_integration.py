@@ -13,12 +13,17 @@ from app.services.pii_service import PIIRedactor
 
 
 class FakeCollection:
+    """Fake collection: app dùng `upsert` từ KB-2.2 (ID ổn định), `add` giữ để tương thích."""
+
     def __init__(self):
         self.added = []
 
     def add(self, embeddings, documents, metadatas, ids):
         self.added.append({"embeddings": embeddings, "documents": documents,
                            "metadatas": metadatas, "ids": ids})
+
+    def upsert(self, embeddings, documents, metadatas, ids):
+        self.add(embeddings, documents, metadatas, ids)
 
 
 class FakeEmbeddings:
