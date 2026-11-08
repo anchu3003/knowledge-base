@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import importlib
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -20,6 +21,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTex
 
 from app.core.config import Settings
 from app.core.embeddings import build_embedding_params
+from app.services.dedup import cap_per_file, dedupe_hits
 from app.services.pii_service import PIIRedactor, redact_texts_for_ingest
 
 logger = logging.getLogger(__name__)
@@ -183,13 +185,14 @@ class DocumentService:
             splitter = self.get_splitter(file_path)
             chunks = splitter.split_documents(documents)
 
-            # Add metadata
-            for chunk in chunks:
+            # Add metadata. `chunk_index` phải đếm **theo file** (dùng cho chunk_id ổn định, KB-2.2).
+            for idx, chunk in enumerate(chunks):
                 chunk.metadata.update({
                     "source": str(file_path),
                     "file_type": file_path.suffix,
                     "file_name": file_path.name,
-                    "file_size": file_path.stat().st_size
+                    "file_size": file_path.stat().st_size,
+                    "chunk_index": idx,
                 })
 
             return chunks
@@ -237,6 +240,15 @@ class DocumentService:
             # Default for .txt and .json
             return self.text_splitter
 
+    @staticmethod
+    def _make_chunk_id(source: str, chunk_index: int, text: str) -> str:
+        """ID ổn định theo nội dung + vị trí (KB-2.2).
+
+        Dùng sha1 thay vì `hash()` (bị randomize mỗi process → ingest lặp sinh bản trùng).
+        """
+        payload = f"{source}|{chunk_index}|{text}"
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+
     async def _add_documents_to_db(self, documents: List[Document]):
         """Add documents to ChromaDB vector database"""
         ids: List[str] = []
@@ -256,6 +268,19 @@ class DocumentService:
                     f"Ingest PII redaction: masked {redactions} value(s) across {len(texts)} chunks."
                 )
 
+        # Stable, content-addressed IDs + `chunk_id` in metadata (KB-2.2). Re-ingesting the same
+        # file produces the same IDs → `upsert` updates in place instead of duplicating.
+        ids = [
+            self._make_chunk_id(
+                str(meta.get("source", "")),
+                int(meta.get("chunk_index", index)),
+                text,
+            )
+            for index, (text, meta) in enumerate(zip(texts, metadatas))
+        ]
+        for meta, chunk_id in zip(metadatas, ids):
+            meta["chunk_id"] = chunk_id
+
         batch_size = max(1, self.settings.embedding_batch_size)
         total = len(texts)
         loop = asyncio.get_event_loop()
@@ -265,6 +290,7 @@ class DocumentService:
             end = min(start + batch_size, total)
             batch_texts = texts[start:end]
             batch_metas = metadatas[start:end]
+            batch_ids = ids[start:end]
 
             # Compute embeddings for this batch off the event loop
             embeddings = await loop.run_in_executor(
@@ -273,19 +299,16 @@ class DocumentService:
                 batch_texts,
             )
 
-            # Generate unique IDs for the batch (stable-ish based on content snippet)
-            ids = [f"doc_{i}_{abs(hash(t[:100]))}" for i, t in enumerate(batch_texts, start=start)]
-
-            # Add batch to ChromaDB
+            # Upsert (idempotent) batch to ChromaDB
             try:
-                self.collection.add(
+                self.collection.upsert(
                     embeddings=embeddings,
                     documents=batch_texts,
                     metadatas=batch_metas,
-                    ids=ids,
+                    ids=batch_ids,
                 )
                 added += len(batch_texts)
-                logger.info(f"Added batch {start}-{end - 1} ({len(batch_texts)}) documents to ChromaDB collection.")
+                logger.info(f"Upserted batch {start}-{end - 1} ({len(batch_texts)}) documents to ChromaDB collection.")
             except Exception as e:
                 logger.error(f"Error adding batch {start}-{end - 1} to ChromaDB: {e}")
                 raise
@@ -324,10 +347,20 @@ class DocumentService:
             except Exception as e:
                 logger.warning(f"Failed to load CrossEncoder model {self.settings.rerank_model}: {e}")
 
+    def _postprocess_hits(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Hậu xử lý kết quả retrieval (KB-2.2): bỏ chunk gần trùng + giới hạn chunk/file.
+
+        `hits` phải đã sort theo score giảm dần; hàm giữ hit đứng trước (score cao hơn).
+        """
+        if self.settings.dedup_enabled:
+            hits = dedupe_hits(hits, self.settings.dedup_jaccard_threshold)
+        return cap_per_file(hits, self.settings.max_chunks_per_file)
+
     async def search_similar_documents(self, query: str, k: int = None) -> List[Dict[str, Any]]:
         """Search for similar documents using dense, sparse and optional re-ranking.
 
-        Returns list of dicts: {content, metadata, score, rank}
+        Returns list of dicts: {chunk_id, content, metadata, score, rank}
+        (dedup + cap/file đã áp dụng — xem `_postprocess_hits`)
         """
         if k is None:
             k = self.settings.retrieval_k
@@ -355,6 +388,11 @@ class DocumentService:
             ):
                 dense_items.append((doc_id, doc, meta, 1 - float(dist)))
 
+        # Ngưỡng cosine tối thiểu cho dense candidates (0 = tắt). Chỉ dense được lọc:
+        # score hybrid đã min-max normalize, còn rerank là logits cross-encoder — không cùng scale.
+        if self.settings.similarity_threshold > 0:
+            dense_items = [item for item in dense_items if item[3] >= self.settings.similarity_threshold]
+
         # Sparse retrieval via BM25
         sparse_scores: Dict[str, float] = {}
         if self.settings.enable_bm25 and self._bm25 is not None and self._corpus_ids:
@@ -370,10 +408,12 @@ class DocumentService:
 
         # If hybrid disabled, return dense-only top k
         if not self.settings.enable_hybrid and not self.settings.enable_rerank:
-            similar_docs: List[Dict[str, Any]] = []
-            for i, (_, doc, meta, score) in enumerate(dense_items[:k]):
-                similar_docs.append({"content": doc, "metadata": meta, "score": score, "rank": i + 1})
-            return similar_docs
+            dense_hits: List[Dict[str, Any]] = [
+                {"chunk_id": doc_id, "content": doc, "metadata": dict(meta), "score": float(score)}
+                for doc_id, doc, meta, score in dense_items
+            ]
+            dense_hits = self._postprocess_hits(dense_hits)
+            return [{**hit, "rank": idx} for idx, hit in enumerate(dense_hits[:k], start=1)]
 
         # Normalize scores
         def normalize(scores: List[float]) -> List[float]:
@@ -415,8 +455,8 @@ class DocumentService:
             elif s is not None:
                 combined[cid] = s if (1 - alpha) > 0 else 0.0
 
-        # Build a candidate list with content/meta
-        candidates: List[Tuple[str, str, Dict[str, Any], float]] = []
+        # Build candidate hits (shape = kết quả cuối, để dedup/cap dùng chung 1 định dạng)
+        candidates: List[Dict[str, Any]] = []
         for cid in candidate_ids:
             if cid in dense_score_map:
                 doc, meta, _ = dense_score_map[cid]
@@ -429,15 +469,23 @@ class DocumentService:
                 except ValueError:
                     # Skip if metadata not found
                     continue
-            candidates.append((cid, doc, meta, combined.get(cid, 0.0)))
+            candidates.append({
+                "chunk_id": cid,
+                "content": doc,
+                "metadata": dict(meta),
+                "score": float(combined.get(cid, 0.0)),
+            })
 
         # Sort by combined score
-        candidates.sort(key=lambda x: x[3], reverse=True)
+        candidates.sort(key=lambda hit: hit["score"], reverse=True)
+
+        # Dedup + cap/file TRƯỚC rerank: không để reranker chấm lại các chunk trùng nội dung
+        candidates = self._postprocess_hits(candidates)
 
         # Optional cross-encoder re-ranking on top-N
         if self.settings.enable_rerank and candidates:
             top_n = min(self.settings.rerank_top_n, len(candidates))
-            pairs = [(query, c[1]) for c in candidates[:top_n]]
+            pairs = [(query, c["content"]) for c in candidates[:top_n]]
 
             # Run cross-encoder off the event loop
             def _score_pairs() -> List[float]:
@@ -448,21 +496,13 @@ class DocumentService:
 
             rerank_scores: List[float] = await loop.run_in_executor(self.executor, lambda x: _score_pairs(), None)
             reranked = list(zip(candidates[:top_n], rerank_scores))
-            reranked.sort(key=lambda x: x[1], reverse=True)
-            # Replace top_n with reranked order and scores
-            candidates = [(cid, doc, meta, float(score)) for (cid, doc, meta, _), score in reranked] + candidates[
-                top_n:]
+            reranked.sort(key=lambda item: item[1], reverse=True)
+            candidates = [{**hit, "score": float(score)} for hit, score in reranked] + candidates[top_n:]
+            # Rerank đổi thứ tự ⇒ chạy lại dedup/cap để giữ bất biến của top-k
+            candidates = self._postprocess_hits(candidates)
 
         # Prepare final results top-k
-        final = []
-        for i, (_, doc, meta, score) in enumerate(candidates[:k]):
-            final.append({
-                "content": doc,
-                "metadata": meta,
-                "score": float(score),
-                "rank": i + 1,
-            })
-        return final
+        return [{**hit, "rank": idx} for idx, hit in enumerate(candidates[:k], start=1)]
 
     async def get_status(self) -> Dict[str, Any]:
         """Get the status of the document database"""
@@ -491,6 +531,12 @@ class DocumentService:
                 name=self.settings.collection_name,
                 metadata={"description": "RAG documents collection"}
             )
+            # TD-13: phải reset cả corpus in-memory, nếu không BM25 giữ chunk cũ và
+            # sparse retrieval trộn dữ liệu đã xoá (bug thấy ở KB-2.1: 830 vs 638 chunk).
+            self._corpus_ids = []
+            self._corpus_texts = []
+            self._corpus_metas = []
+            self._bm25 = None
             logger.info("ChromaDB collection cleared and recreated successfully.")
         except Exception as e:
             logger.error(f"Error clearing database: {str(e)}")

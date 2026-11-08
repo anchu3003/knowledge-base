@@ -47,7 +47,17 @@ class Settings(BaseSettings):
 
     # RAG Settings
     retrieval_k: int = Field(default=5, alias="RETRIEVAL_K")
-    similarity_threshold: float = Field(default=0.7, alias="SIMILARITY_THRESHOLD")
+    # Ngưỡng cosine tối thiểu cho **dense candidates** (0 = tắt). Chỉ áp cho dense vì score hybrid
+    # đã min-max normalize còn rerank là logits cross-encoder (khác scale, không so được với cosine).
+    # Đo/chốt giá trị thật ở KB-2.5 — đừng đặt số khi chưa đo.
+    similarity_threshold: float = Field(default=0.0, alias="SIMILARITY_THRESHOLD")
+
+    # Hậu xử lý kết quả retrieval (KB-2.2)
+    # Bỏ chunk gần trùng nội dung (Jaccard shingle 3-gram >= ngưỡng) trước khi cắt top-k.
+    dedup_enabled: bool = Field(default=True, alias="DEDUP_ENABLED")
+    dedup_jaccard_threshold: float = Field(default=0.8, alias="DEDUP_JACCARD_THRESHOLD")
+    # Tối đa số chunk của cùng 1 file trong top-k (0 = tắt). Chống "5 tài liệu giống nhau".
+    max_chunks_per_file: int = Field(default=2, alias="MAX_CHUNKS_PER_FILE")
 
     # Query Rewriting Settings
     enable_query_rewrite: bool = Field(default=True, alias="ENABLE_QUERY_REWRITE")
