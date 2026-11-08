@@ -1,14 +1,56 @@
 'use client';
 
+import {useState} from 'react';
+import {Copy} from 'lucide-react';
+
 import {Avatar, AvatarFallback} from '@/components/ui/avatar';
 import {Skeleton} from '@/components/ui/skeleton';
 import {MessageWithCitations} from '@/components/message-with-citations';
 import {PiiBadge} from '@/components/pii-badge';
 import {SourcesPanel} from '@/components/sources-panel';
+import {useToast} from '@/components/toast-provider';
 import type {ChatMessage} from '@/lib/types';
 
 /** Message type sống ở `lib/types.ts` (KB-4.9: `lib/chat-store.ts` cũng cần) — re-export cho chỗ cũ. */
 export type {ChatMessage};
+
+/**
+ * Hàng hành động của một câu trả lời (hiện khi hover/focus). Nằm **ngoài** bubble nên không chiếm chỗ
+ * bên trong và không đè lên chữ; feedback dùng `useToast` (KB-4.8) thay vì đổi text tại chỗ.
+ */
+function MessageActions({content}: {content: string}) {
+    const {toast} = useToast();
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(content);
+            setCopied(true);
+            toast({title: 'Đã sao chép câu trả lời'});
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            toast({
+                title: 'Không sao chép được',
+                description: 'Trình duyệt chặn clipboard (cần HTTPS hoặc localhost).',
+                variant: 'destructive',
+            });
+        }
+    };
+
+    return (
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <button
+                type="button"
+                onClick={handleCopy}
+                aria-label="Sao chép câu trả lời"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+                <Copy className="size-3"/>
+                {copied ? 'Đã chép' : 'Sao chép'}
+            </button>
+        </div>
+    );
+}
 
 /** Chip `[S#]` vừa bấm — panel nguồn của message đó scroll + highlight (KB-4.3). */
 export interface CitationFocus {
@@ -42,7 +84,7 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
                 return (
                     <div
                         key={message.id}
-                        className={`flex items-start gap-2.5 ${isUser ? 'flex-row-reverse' : ''}`}
+                        className={`group flex items-start gap-2.5 ${isUser ? 'flex-row-reverse' : ''}`}
                     >
                         <Avatar className="mt-0.5 hidden sm:flex">
                             <AvatarFallback className={isUser ? 'bg-secondary text-secondary-foreground' : undefined}>
@@ -52,7 +94,7 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
 
                         <div className={`flex min-w-0 flex-1 flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
                             <div
-                                className={`w-full max-w-[calc(100%-1rem)] rounded-2xl border px-3.5 py-2.5 shadow-xs group ${
+                                className={`w-fit max-w-[88%] rounded-2xl border px-3.5 py-2.5 shadow-xs ${
                                     isUser
                                         ? 'border-primary/30 bg-primary text-primary-foreground'
                                         : 'border-border bg-card text-card-foreground'
@@ -72,6 +114,9 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
                                     onCitationClick={(citationId) => onCitationClick(message.id, citationId)}
                                 />
                             </div>
+
+                            {/* Hành động của message: nằm NGOÀI bubble (không chiếm chỗ / không đè chữ), hiện khi hover */}
+                            {!isUser && <MessageActions content={message.content}/>}
 
                             {message.sources && message.sources.length > 0 && (
                                 <SourcesPanel

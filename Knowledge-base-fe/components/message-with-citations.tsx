@@ -1,10 +1,9 @@
 'use client';
 
 import {Card, CardContent} from '@/components/ui/card';
-import {Copy, ExternalLink} from 'lucide-react';
+import {ExternalLink} from 'lucide-react';
 import {TypingIndicator} from './typing-indicator';
 import {MarkdownMessage} from './markdown-message';
-import {useState} from 'react';
 
 interface Citation {
     id: string;
@@ -46,17 +45,6 @@ export function MessageWithCitations({
                                          onCitationClick,
                                          stopped = false,
                                      }: MessageWithCitationsProps) {
-    const [copied, setCopied] = useState(false);
-
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(content);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // clipboard bị chặn — bỏ qua
-        }
-    };
     return (
         <div className="relative space-y-2">
             {/* KB-4.9: nút "Sao chép" chuyển xuống dưới nội dung, chỉ hiện khi hover/focus ⇒ không đè lên chữ */}
@@ -74,19 +62,6 @@ export function MessageWithCitations({
                 )}
             </div>
 
-            {!isUser && (
-                <div className="flex justify-end">
-                    <button
-                        onClick={handleCopy}
-                        aria-label="Sao chép câu trả lời"
-                        className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        title="Sao chép câu trả lời"
-                    >
-                        <Copy className="h-3 w-3"/>
-                        <span>{copied ? 'Đã chép' : 'Sao chép'}</span>
-                    </button>
-                </div>
-            )}
 
             {/* Sources (new format) */}
             {!isUser && sources.length > 0 && (
