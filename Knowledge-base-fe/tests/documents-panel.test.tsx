@@ -6,7 +6,9 @@ import {
     DocumentsPanelContent,
     canConfirmClear,
     failedChecks,
+    isRefreshSafe,
     readyTone,
+    refreshBlockedReason,
 } from '@/components/documents-panel';
 
 const baseProps = {
@@ -136,5 +138,48 @@ describe('helpers của DocumentsPanel', () => {
         expect(canConfirmClear('CLEAR')).toBe(true);
         expect(canConfirmClear('clear')).toBe(false);
         expect(canConfirmClear('CLEAR ')).toBe(false);
+    });
+});
+
+// KB-4.10: Refresh phải bị chặn khi backend không thấy folder tài liệu (nếu không sẽ xoá index vô ích)
+describe('Refresh bị chặn khi folder tài liệu rỗng (KB-4.10)', () => {
+    it('folder không tồn tại ⇒ nút Refresh disabled + hiện lý do', () => {
+        const onAskRefresh = vi.fn();
+        render(<DocumentsPanelContent {...baseProps}
+                                     folder={{...baseProps.folder, exists: false, supported_files_count: 0}}
+                                     onAskRefresh={onAskRefresh}/>);
+
+        const refresh = screen.getByRole('button', {name: /Refresh index/});
+        expect(refresh).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent(/không thấy folder tài liệu/i);
+    });
+
+    it('folder có nhưng 0 file hỗ trợ ⇒ cũng chặn', () => {
+        render(<DocumentsPanelContent {...baseProps}
+                                     folder={{...baseProps.folder, exists: true, supported_files_count: 0}}/>);
+
+        expect(screen.getByRole('button', {name: /Refresh index/})).toBeDisabled();
+        expect(screen.getByRole('status')).toHaveTextContent(/không có file hỗ trợ/i);
+    });
+
+    it('folder có file hỗ trợ ⇒ Refresh bật bình thường', async () => {
+        const onAskRefresh = vi.fn();
+        render(<DocumentsPanelContent {...baseProps}
+                                     folder={{...baseProps.folder, exists: true, supported_files_count: 6}}
+                                     onAskRefresh={onAskRefresh}/>);
+
+        const refresh = screen.getByRole('button', {name: /Refresh index/});
+        expect(refresh).toBeEnabled();
+        expect(screen.queryByRole('status')).toBeNull();
+        await userEvent.click(refresh);
+        expect(onAskRefresh).toHaveBeenCalledOnce();
+    });
+
+    it('helpers: isRefreshSafe / refreshBlockedReason', () => {
+        expect(isRefreshSafe(null)).toBe(false);
+        expect(isRefreshSafe({exists: false} as never)).toBe(false);
+        expect(isRefreshSafe({exists: true, supported_files_count: 0} as never)).toBe(false);
+        expect(isRefreshSafe({exists: true, supported_files_count: 3} as never)).toBe(true);
+        expect(refreshBlockedReason({exists: true, supported_files_count: 3} as never)).toBeNull();
     });
 });

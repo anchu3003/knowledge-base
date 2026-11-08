@@ -82,6 +82,28 @@ export function canConfirmClear(input: string): boolean {
     return input === CLEAR_CONFIRM_WORD;
 }
 
+/**
+ * Refresh = clear + re-index. Nếu backend không thấy folder tài liệu (folder không tồn tại hoặc 0 file hỗ trợ)
+ * thì refresh sẽ **xoá index mà không index lại được** ⇒ phải chặn ở UI (KB-4.10).
+ */
+export function isRefreshSafe(folder?: FolderInfo | null): boolean {
+    if (!folder) return false;
+    if (folder.exists === false) return false;
+    return (folder.supported_files_count ?? 0) > 0;
+}
+
+/** Lý do Refresh bị chặn (hiện cạnh nút) — `null` khi refresh an toàn. */
+export function refreshBlockedReason(folder?: FolderInfo | null): string | null {
+    if (!folder) return 'Chưa đọc được thông tin folder tài liệu.';
+    if (folder.exists === false) {
+        return `Backend không thấy folder tài liệu (${folder.folder_path}) — refresh sẽ xoá index mà không index lại được.`;
+    }
+    if ((folder.supported_files_count ?? 0) === 0) {
+        return 'Folder tài liệu không có file hỗ trợ nào — refresh sẽ xoá index mà không index lại được.';
+    }
+    return null;
+}
+
 // ------------------------------
 // Presentational — nhận toàn bộ data qua props (SSR test được)
 // ------------------------------
@@ -162,6 +184,8 @@ export function DocumentsPanelContent({
     const tone = readyTone(ready?.status);
     const failures = failedChecks(ready);
     const disabled = busy !== null;
+    // KB-4.10: chặn Refresh khi backend không thấy folder tài liệu (sẽ xoá index mà không index lại được)
+    const refreshBlocked = refreshBlockedReason(folder);
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true"
@@ -306,19 +330,28 @@ export function DocumentsPanelContent({
                     )}
                 </div>
 
-                <footer className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-700">
-                    <Button size="sm" variant="ghost" onClick={onAskRefresh}
-                            disabled={disabled || pending !== null}
-                            className="gap-1">
-                        <RefreshCw className="h-3.5 w-3.5"/>
-                        Refresh index
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={onAskClear}
-                            disabled={disabled || pending !== null}
-                            className="gap-1 text-rose-600 hover:text-rose-700 dark:text-rose-400">
-                        <Trash2 className="h-3.5 w-3.5"/>
-                        Clear
-                    </Button>
+                <footer className="flex flex-col gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-700">
+                    {refreshBlocked && (
+                        <p role="status"
+                           className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
+                            ⚠ {refreshBlocked}
+                        </p>
+                    )}
+                    <div className="flex items-center justify-end gap-2">
+                        <Button size="sm" variant="ghost" onClick={onAskRefresh}
+                                disabled={disabled || pending !== null || refreshBlocked !== null}
+                                title={refreshBlocked ?? 'Clear index rồi re-index toàn bộ folder tài liệu'}
+                                className="gap-1">
+                            <RefreshCw className="h-3.5 w-3.5"/>
+                            Refresh index
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={onAskClear}
+                                disabled={disabled || pending !== null}
+                                className="gap-1 text-rose-600 hover:text-rose-700 dark:text-rose-400">
+                            <Trash2 className="h-3.5 w-3.5"/>
+                            Clear
+                        </Button>
+                    </div>
                 </footer>
             </aside>
         </div>
