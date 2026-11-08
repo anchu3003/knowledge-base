@@ -34,6 +34,7 @@ from app.core.errors import (
 )
 from app.main import app, get_chat_service
 from app.models.schemas import ErrorResponse
+from app.core.provider_retry import ProviderThrottle
 from app.services.chat_service import ChatService
 from app.services.pii_service import PIIRedactor
 
@@ -123,6 +124,11 @@ def make_chat_service(error) -> ChatService:
         openai_base_url="",
         enable_pii_redaction=True,
         pii_placeholder="[REDACTED:{type}]",
+        # Retry = 0 để test này chỉ kiểm *mapping* lỗi (hành vi retry có file test riêng: KB-3.2).
+        provider_timeout_seconds=60.0,
+        provider_max_retries=0,
+        provider_retry_base_delay=2.0,
+        provider_max_concurrency=1,
     )
     service = object.__new__(ChatService)
     service.settings = settings
@@ -130,6 +136,7 @@ def make_chat_service(error) -> ChatService:
     service.llm = FailingLLM(error)
     service.conversations = {}
     service.pii = PIIRedactor(settings)
+    service.provider = ProviderThrottle(settings)
     return service
 
 

@@ -9,6 +9,7 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 from app.core.config import Settings
 from app.core.errors import AppError, map_provider_error
+from app.core.provider_retry import ProviderThrottle
 from app.services.document_service import DocumentService
 from app.services.pii_service import PIIRedactor, summarize_pii_stats
 
@@ -33,7 +34,9 @@ class ChatService:
                         azure_deployment=settings.openai_model,
                         azure_endpoint=settings.openai_base_url,
                         temperature=settings.default_temperature,
-                        max_tokens=settings.default_max_tokens
+                        max_tokens=settings.default_max_tokens,
+                        timeout=settings.provider_timeout_seconds,
+                        max_retries=0,
                     )
                     logger.info("AzureChatOpenAI initialized successfully")
                 except Exception as e:
@@ -49,6 +52,8 @@ class ChatService:
                         api_key=settings.openai_api_key,
                         temperature=settings.default_temperature,
                         max_tokens=settings.default_max_tokens,
+                        timeout=settings.provider_timeout_seconds,
+                        max_retries=0,
                         model_kwargs={
                             "azure_endpoint": settings.openai_base_url,
                             "openai_api_version": settings.openai_api_version,
@@ -67,7 +72,10 @@ class ChatService:
                 "openai_api_key": settings.openai_api_key,
                 "model": settings.openai_model,
                 "temperature": settings.default_temperature,
-                "max_tokens": settings.default_max_tokens
+                "max_tokens": settings.default_max_tokens,
+                # Retry do service quyết định (`ProviderThrottle`) — SDK không retry để tránh 2 tầng.
+                "timeout": settings.provider_timeout_seconds,
+                "max_retries": 0,
             }
             if settings.openai_base_url:
                 llm_kwargs["openai_api_base"] = settings.openai_base_url
@@ -86,6 +94,10 @@ class ChatService:
         # PII/secret redaction applied to every payload sent to the LLM
         # (see .clinerules/30-pii-safety.md)
         self.pii = PIIRedactor(settings)
+
+        # Cổng duy nhất gọi provider: semaphore (PROVIDER_MAX_CONCURRENCY) + retry có ngân sách
+        # (KB-3.2). LLM được tạo với `max_retries=0` ⇒ chỉ có MỘT tầng retry.
+        self.provider = ProviderThrottle(settings)
 
     async def chat(
             self,
@@ -166,8 +178,8 @@ class ChatService:
             self.llm.temperature = temperature
             self.llm.max_tokens = max_tokens
 
-            # Generate response
-            response = await self.llm.agenerate([messages])
+            # Generate response (retry/backoff + semaphore: KB-3.2)
+            response = await self.provider.run(lambda: self.llm.agenerate([messages]), op="chat")
             ai_response = response.generations[0][0].text
 
             # Update conversation history
@@ -304,7 +316,7 @@ class ChatService:
             }
 
             full_text = ""
-            async for chunk in self.llm.astream(messages):
+            async for chunk in self.provider.stream(lambda: self.llm.astream(messages), op="stream_chat"):
                 # chunk is typically an AIMessageChunk with .content containing incremental text
                 delta = getattr(chunk, "content", None)
                 if not delta:
@@ -392,7 +404,11 @@ class ChatService:
             try:
                 self.llm.temperature = 0.2
                 self.llm.max_tokens = 64
-                resp = await self.llm.agenerate([[system, human]])
+                # Rewrite là best-effort: chỉ đi qua semaphore, KHÔNG retry (retry sẽ đốt quota
+                # đúng lúc provider đang 429 — mà query gốc vẫn dùng được).
+                resp = await self.provider.run(
+                    lambda: self.llm.agenerate([[system, human]]), op="rewrite", retry=False,
+                )
             finally:
                 self.llm.temperature = prev_temp
                 self.llm.max_tokens = prev_max

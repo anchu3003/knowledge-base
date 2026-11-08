@@ -81,6 +81,14 @@ class Settings(BaseSettings):
     default_max_tokens: int = Field(default=1000, alias="DEFAULT_MAX_TOKENS")
     max_conversation_length: int = Field(default=10, alias="MAX_CONVERSATION_LENGTH")
 
+    # Provider resilience (KB-3.2) — Groq free tier TPM 8000: retry có ngân sách + serialize call.
+    # Timeout đẩy thẳng vào SDK (`ChatOpenAI(timeout=…)`); retry do `ProviderThrottle` quyết định
+    # (`ChatOpenAI(max_retries=0)`) để chỉ có MỘT tầng retry. Q&A KB-3.2: 2 retry (~6s) + concurrency 1.
+    provider_timeout_seconds: float = Field(default=60.0, alias="PROVIDER_TIMEOUT_SECONDS")
+    provider_max_retries: int = Field(default=2, alias="PROVIDER_MAX_RETRIES")
+    provider_retry_base_delay: float = Field(default=2.0, alias="PROVIDER_RETRY_BASE_DELAY")
+    provider_max_concurrency: int = Field(default=1, alias="PROVIDER_MAX_CONCURRENCY")
+
     # Prompt Settings
     # Path to the system prompt template file. The template may contain a `{context}` placeholder.
     system_prompt_path: str = Field(default="./prompts/system_prompt.txt", alias="SYSTEM_PROMPT_PATH")

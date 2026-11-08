@@ -184,6 +184,16 @@ Defined in `app/core/config.py`. All can be provided via `.env`.
   - `DEFAULT_MAX_TOKENS` (default: `1000`)
   - `MAX_CONVERSATION_LENGTH` (default: `10`)
 
+- Provider resilience (KB-3.2) — Groq free tier chỉ có **TPM 8000**
+  - `PROVIDER_TIMEOUT_SECONDS` (default: `60`) — timeout của **một** call tới provider (đẩy vào SDK).
+  - `PROVIDER_MAX_RETRIES` (default: `2`) — số lần retry cho `429` / `5xx` / timeout / lỗi kết nối
+    (≈ tối đa 6s chờ với base 2s). `4xx` khác **không** retry. `ChatOpenAI(max_retries=0)` nên SDK
+    không retry — service là tầng retry duy nhất.
+  - `PROVIDER_RETRY_BASE_DELAY` (default: `2.0`) — base cho exponential backoff + **jitter** (`1–2s`, `2–4s`, …);
+    header `Retry-After` của provider (giây **hoặc** ms) được ưu tiên, cap ở `PROVIDER_TIMEOUT_SECONDS`.
+  - `PROVIDER_MAX_CONCURRENCY` (default: `1`) — số call provider đồng thời; `1` = **serialize** để 2 request
+    cùng lúc không đẩy TPM vượt hạn mức (query rewrite cũng đi qua cổng này, nhưng **không** retry).
+
 - Prompt Files
   - `SYSTEM_PROMPT_PATH` (default: `./prompts/system_prompt.txt`)
   - `REWRITE_SYSTEM_PROMPT_PATH` (default: `./prompts/rewrite_system_prompt.txt`)
