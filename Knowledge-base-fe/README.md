@@ -1,6 +1,31 @@
 step 1: npm install --force or --legacy-peer-deps
 step 2: npm run dev
 
+## Cấu hình FE (KB-4.1)
+
+Copy `.env.example` → `.env.local` và set backend URL:
+
+```env
+# Browser gọi trực tiếp backend (BE: repo Knowledge-base, mặc định port 8000)
+NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000
+```
+
+`NEXT_PUBLIC_*` được **nhúng vào bundle lúc build** ⇒ đổi URL phải `npm run build` lại (Docker: `--build-arg`,
+xem KB-4.7).
+
+## API client & hiển thị lỗi (KB-4.1)
+
+- Mọi call backend đi qua `lib/api.ts` (`apiFetch`, `postChat`) — **không** gọi `fetch` inline trong page.
+- Lỗi HTTP được parse theo contract của BE: `{"error": {"code", "message", "request_id"}}` + header `X-Request-ID`
+  ⇒ ném `ApiError` (có `code`, `requestId`, `status`).
+- `lib/errors.ts` map `code` → **message tiếng Việt** + `hint` + `retryable`; UI hiện banner đỏ kèm `code`,
+  `request_id` và nút **Thử lại** (chỉ với lỗi tạm thời: `429/502/503/504`, `network_error`, `service_unavailable`).
+- `conversation_id` của BE được lưu trong `localStorage` (`kb.conversation_id`) ⇒ reload vẫn hỏi tiếp mạch;
+  **New chat** sẽ xoá id này.
+
+> Phần còn lại của README (proxy Python `server.fastapi_openai_proxy`, `/chat` của repo khác) là **tài liệu cũ**
+> từ thời onboarding — backend thật là `Knowledge-base/` (FastAPI, xem README repo đó). Dọn lại ở **TD-20**.
+
 ## Quick start (developer)
 
 Prerequisites (dev chuẩn: **WSL2 Ubuntu** — `AGENTS.md` §6, KB-7.1):

@@ -18,6 +18,8 @@ yarn-error.log*
 
 # env files
 .env*
+# ...nhưng giữ file mẫu (không chứa secret) để người khác biết cần biến gì — KB-4.1
+!.env.example
 
 # vercel
 .vercel

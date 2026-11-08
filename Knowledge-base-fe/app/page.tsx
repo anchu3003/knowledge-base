@@ -7,7 +7,12 @@ import {AppHeader} from '@/components/app-header';
 import {MessageWithCitations} from '@/components/message-with-citations';
 import {PiiBadge} from '@/components/pii-badge';
 import {ChatHistorySidebar} from '@/components/chat-history-sidebar';
-import type {Feedback} from '@/lib/types';
+import {ApiError, postChat} from '@/lib/api';
+import {describeApiError, type ApiErrorView} from '@/lib/errors';
+import type {ChatMetadata, ChatSource} from '@/lib/types';
+
+/** Key localStorage giữ `conversation_id` (Q&A KB-4.1: reload vẫn hỏi tiếp mạch). */
+const CONVERSATION_STORAGE_KEY = 'kb.conversation_id';
 
 interface Message {
     id: string;
@@ -19,22 +24,8 @@ interface Message {
         source: string;
         relevance: number;
     }>;
-    sources?: Array<{
-        file_path: string;
-        file_name: string;
-        file_type: string;
-        relevance_score: number;
-        content_preview: string;
-    }>;
-    metadata?: {
-        retrieved_documents: number;
-        timestamp: string;
-        model: string;
-        temperature: number;
-        max_tokens: number;
-        pii_redacted?: boolean;
-        pii_redacted_count?: number;
-    };
+    sources?: ChatSource[];
+    metadata?: ChatMetadata;
     isStreaming?: boolean;
 }
 
@@ -74,6 +65,12 @@ export default function ChatPage() {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    // KB-4.1: lỗi API hiển thị bằng banner (thay vì message giả trong khung chat)
+    const [apiError, setApiError] = useState<ApiErrorView | null>(null);
+    // Câu hỏi của lần gửi lỗi gần nhất — dùng cho nút "Thử lại" (không nhân đôi message user)
+    const [retryText, setRetryText] = useState<string | null>(null);
+    // `conversation_id` của BE, giữ qua reload bằng localStorage (Q&A KB-4.1)
+    const [conversationId, setConversationId] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll to bottom when messages change
@@ -93,6 +90,27 @@ export default function ChatPage() {
         }
     }, [messages, currentSessionId]);
 
+    // Khôi phục `conversation_id` sau reload (chỉ đọc trong effect để không lệch SSR/hydration)
+    useEffect(() => {
+        try {
+            const stored = window.localStorage.getItem(CONVERSATION_STORAGE_KEY);
+            if (stored && stored.length > 0) {
+                setConversationId(stored);
+            }
+        } catch {
+            // localStorage bị chặn (private mode) — bỏ qua, dùng conversation_id do BE trả về
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!conversationId) return;
+        try {
+            window.localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationId);
+        } catch {
+            // bỏ qua
+        }
+    }, [conversationId]);
+
     const handleSendMessage = async () => {
         setFormError(null);
         if (!input.trim()) {
@@ -110,84 +128,83 @@ export default function ChatPage() {
             return;
         }
 
-        const userMessage: Message = {
-            id: Date.now().toString(),
-            role: 'user',
-            content: input,
-        };
-
-        setMessages((prev) => [...prev, userMessage]);
+        const question = input.trim();
         setInput('');
-        setIsLoading(true);
-        setChatSessions((prev) =>
-            prev.map((session: ChatSession) =>
-                session.id === currentSessionId
-                    ? {...session, messageCount: session.messageCount++}
-                    : session
-            )
-        );
+        await submitQuestion(question, {appendUserMessage: true});
+    };
 
-        // Call backend proxy for a real assistant reply
+    /**
+     * Gửi câu hỏi qua API client (KB-4.1) và cập nhật UI.
+     * `appendUserMessage=false` khi bấm "Thử lại" — message user đã nằm trong khung chat rồi.
+     */
+    const submitQuestion = async (question: string, options: {appendUserMessage: boolean}) => {
+        setApiError(null);
+        setIsLoading(true);
+
+        if (options.appendUserMessage) {
+            setMessages((prev) => [
+                ...prev,
+                {id: Date.now().toString(), role: 'user', content: question},
+            ]);
+            setChatSessions((prev) =>
+                prev.map((session: ChatSession) =>
+                    session.id === currentSessionId
+                        ? {...session, messageCount: session.messageCount + 1}
+                        : session
+                )
+            );
+        }
+
         try {
-            const proxyUrl =
-                (process.env.NEXT_PUBLIC_API_PROXY_URL as string) ||
-                'http://localhost:8000';
-            const resp = await fetch(`${proxyUrl}/chat`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    //max_tokens: maxTokens,
-                    temperature,
-                    conversation_id: currentSessionId,
-                    message: userMessage.content,
-                }),
+            const data = await postChat({
+                message: question,
+                conversation_id: conversationId ?? undefined,
+                max_tokens: maxTokens,
+                temperature,
             });
 
-            if (!resp.ok) {
-                const text = await resp.text();
-                console.error('Proxy returned non-OK:', resp.status, text);
+            if (data.conversation_id) {
+                setConversationId(data.conversation_id);
             }
 
-            const data = await resp.json();
-
-            // Remove duplicate sources based on file_path
-            const uniqueSources = data.sources
+            // TD-12 (bỏ dedup theo file_path) được xử lý ở KB-4.3
+            const uniqueSources: ChatSource[] = data.sources
                 ? (Array.from(
                     new Map(
-                        data.sources.map((source: any) => [source.file_path, source])
+                        data.sources.map((source) => [source.file_path, source])
                     ).values()
-                ) as Array<{
-                    file_path: string;
-                    file_name: string;
-                    file_type: string;
-                    relevance_score: number;
-                    content_preview: string;
-                }>)
+                ) as ChatSource[])
                 : [];
 
-            const assistantMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: data.response || data.reply || '',
-                sources: uniqueSources,
-                metadata: data.metadata || undefined,
-            };
-
-            setMessages((prev) => [...prev, assistantMessage]);
-        } catch (err) {
-            console.error('Error sending message to proxy:', err);
             setMessages((prev) => [
                 ...prev,
                 {
-                    id: (Date.now() + 2).toString(),
+                    id: (Date.now() + 1).toString(),
                     role: 'assistant',
-                    content: 'Error: failed to get response from server.',
+                    content: data.response || '',
+                    sources: uniqueSources,
+                    metadata: data.metadata,
                 },
             ]);
+            setRetryText(null);
+        } catch (error) {
+            // Banner lỗi theo `error.code`; KHÔNG chèn message giả vào khung chat
+            setApiError(describeApiError(error));
+            setRetryText(question);
+            if (!(error instanceof ApiError)) {
+                // lỗi runtime ngoài dự kiến — vẫn log để debug, không lộ ra UI
+                console.debug('Unexpected chat error', error);
+            }
         } finally {
             setIsLoading(false);
         }
     };
+
+    const handleRetry = async () => {
+        if (!retryText) return;
+        await submitQuestion(retryText, {appendUserMessage: false});
+    };
+
 
     const handleSelectSession = (sessionId: string) => {
         // Save current messages to history before switching
@@ -227,6 +244,15 @@ export default function ChatPage() {
         };
         setChatSessions((prev) => [newSession, ...prev]);
         setCurrentSessionId(newSession.id);
+        // KB-4.1: chat mới ⇒ conversation_id mới (BE sẽ cấp id khác) — xoá id cũ khỏi localStorage
+        setConversationId(null);
+        setApiError(null);
+        setRetryText(null);
+        try {
+            window.localStorage.removeItem(CONVERSATION_STORAGE_KEY);
+        } catch {
+            // bỏ qua
+        }
         setMessages([
             {
                 id: '1',
@@ -243,21 +269,6 @@ export default function ChatPage() {
             if (remaining.length > 0) {
                 setCurrentSessionId(remaining[0].id);
             }
-        }
-    };
-
-    const handleFeedbackSubmit = async (
-        feedback: Omit<Feedback, 'id' | 'createdAt'>
-    ) => {
-        try {
-            await fetch('/api/feedback/submit', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(feedback),
-            });
-        } catch (error) {
-            console.error('Error submitting feedback:', error);
-            throw error;
         }
     };
 
@@ -283,6 +294,68 @@ export default function ChatPage() {
 
                 {/* Chat Area */}
                 <main className="flex-1 flex flex-col ml-64">
+                    {/* Banner lỗi API theo `error.code` (KB-4.1) — thay cho message giả trong khung chat */}
+                    {apiError && (
+                        <div
+                            role="alert"
+                            aria-live="assertive"
+                            className="border-b border-red-200 bg-red-50 px-6 py-3 dark:border-red-900/40 dark:bg-red-900/20"
+                        >
+                            <div className="mx-auto flex max-w-3xl items-start gap-3">
+                                <svg
+                                    className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                                    />
+                                </svg>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                                        {apiError.message}
+                                    </p>
+                                    {apiError.hint && (
+                                        <p className="mt-0.5 text-xs text-red-700/80 dark:text-red-300/80">
+                                            {apiError.hint}
+                                        </p>
+                                    )}
+                                    <p className="mt-1 font-mono text-[11px] text-red-700/70 dark:text-red-300/60">
+                                        code: {apiError.code}
+                                        {apiError.requestId && apiError.requestId !== '-' && (
+                                            <span> · request_id: {apiError.requestId}</span>
+                                        )}
+                                    </p>
+                                </div>
+                                <div className="flex flex-shrink-0 items-center gap-2">
+                                    {apiError.retryable && retryText && (
+                                        <Button
+                                            size="sm"
+                                            onClick={handleRetry}
+                                            disabled={isLoading}
+                                            className="bg-red-600 text-white hover:bg-red-700"
+                                        >
+                                            Thử lại
+                                        </Button>
+                                    )}
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setApiError(null)}
+                                        aria-label="Đóng thông báo lỗi"
+                                    >
+                                        Đóng
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Messages */}
                     <ScrollArea className="flex-1 p-6">
                         <div className="max-w-3xl mx-auto space-y-6">
@@ -621,8 +694,6 @@ export default function ChatPage() {
                 </main>
             </div>
 
-            {/* Feedback Modal */}
-            {/*<FeedbackModal onSubmit={handleFeedbackSubmit}/>*/}
         </div>
     );
 }
