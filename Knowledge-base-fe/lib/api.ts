@@ -9,7 +9,15 @@
  * message tiếng Việt (xem `lib/errors.ts`).
  */
 
-import type { ChatRequest, ChatResponse } from './types';
+import type {
+    ChatRequest,
+    ChatResponse,
+    DocumentStatus,
+    DocumentsRefreshResult,
+    FolderInfo,
+    HealthStatus,
+    ReadinessStatus,
+} from './types';
 import { createSseParser, isAbortError, parseChatEvent, type ChatStreamEvent } from './sse';
 
 export const API_BASE_URL: string =
@@ -19,6 +27,9 @@ export const REQUEST_ID_HEADER = 'X-Request-ID';
 
 /** Code do FE tự sinh khi không có response HTTP (mất mạng, CORS, BE tắt). */
 export const NETWORK_ERROR_CODE = 'network_error';
+/** Code do FE tự sinh khi request bị huỷ vì quá thời gian chờ (vd re-index hàng chục phút). */
+export const REQUEST_TIMEOUT_CODE = 'request_timeout';
+
 /** Code fallback khi response lỗi nhưng không parse được body theo contract. */
 export const UNKNOWN_ERROR_CODE = 'internal_error';
 
@@ -76,6 +87,13 @@ function toApiError(response: Response, rawBody: string): ApiError {
     });
 }
 
+/** `AbortSignal.timeout()` ném `TimeoutError` (khác `AbortError` của nút Stop). */
+function isTimeoutError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const name = (error as { name?: string }).name;
+    return name === 'TimeoutError';
+}
+
 /**
  * Gọi API và trả JSON đã parse. Ném `ApiError` cho mọi lỗi (mạng / HTTP / body sai contract).
  */
@@ -91,6 +109,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
             },
         });
     } catch (error) {
+        // Timeout (AbortSignal.timeout) không phải mất mạng — phải nói đúng cho người dùng
+        if (isTimeoutError(error)) {
+            throw new ApiError({
+                code: REQUEST_TIMEOUT_CODE,
+                message: 'Request quá thời gian chờ.',
+                status: 0,
+            });
+        }
         // Mất mạng, CORS, BE tắt — không có status để đọc
         throw new ApiError({
             code: NETWORK_ERROR_CODE,
@@ -226,3 +252,81 @@ export async function streamChat(
         reader.cancel().catch(() => undefined);
     }
 }
+
+// ------------------------------
+// Documents & health (KB-4.5)
+// ------------------------------
+
+/**
+ * Timeout cho **re-index**: BE clear rồi load lại toàn bộ folder (TD-14: có thể vài chục phút).
+ * Không đặt thì `fetch` treo vô hạn và người dùng không biết có gì xảy ra.
+ */
+export const REFRESH_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** `GET /documents/status` — số chunk trong vector store. */
+export async function getDocumentsStatus(): Promise<DocumentStatus> {
+    return apiFetch<DocumentStatus>('/documents/status');
+}
+
+/** `GET /documents/folder-info` — đếm file trên đĩa + danh sách hỗ trợ (tối đa 20). */
+export async function getFolderInfo(): Promise<FolderInfo> {
+    return apiFetch<FolderInfo>('/documents/folder-info');
+}
+
+/**
+ * `POST /documents/refresh` — clear index rồi re-index toàn bộ folder.
+ *
+ * ⚠️ Request **rất dài** ⇒ dùng timeout riêng (`REFRESH_TIMEOUT_MS`). Nếu BE restart giữa chừng thì FE chỉ
+ * thấy `network_error`/`request_timeout` — không có cách phân biệt, chấp nhận (ghi trong Learning note).
+ */
+export async function refreshDocuments(): Promise<DocumentsRefreshResult> {
+    const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(REFRESH_TIMEOUT_MS)
+        : undefined;
+    return apiFetch<DocumentsRefreshResult>('/documents/refresh', {
+        method: 'POST',
+        signal,
+    });
+}
+
+/** `DELETE /documents/clear` — xoá sạch index (không xoá file trên đĩa). */
+export async function clearDocuments(): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>('/documents/clear', { method: 'DELETE' });
+}
+
+/** `GET /health` — liveness, **luôn 200** khi process còn sống. */
+export async function getHealth(): Promise<HealthStatus> {
+    return apiFetch<HealthStatus>('/health');
+}
+
+/**
+ * `GET /ready` — readiness. BE trả **503** kèm payload `{status, checks}` khi `error`
+ * ⇒ **không** dùng `apiFetch` (nó ném lỗi theo HTTP status), đọc body trước rồi mới quyết định.
+ */
+export async function getReady(): Promise<ReadinessStatus> {
+    let response: Response;
+
+    try {
+        response = await fetch(`${API_BASE_URL}/ready`, {headers: {Accept: 'application/json'}});
+    } catch {
+        throw new ApiError({
+            code: NETWORK_ERROR_CODE,
+            message: 'Không kết nối được tới server.',
+            status: 0,
+        });
+    }
+
+    const rawBody = await response.text().catch(() => '');
+    const body = safeJson(rawBody);
+
+    // 200 (ok/degraded) và 503 (error) dùng **cùng schema** ⇒ ưu tiên đọc payload
+    if (body && typeof body.status === 'string') {
+        return {
+            status: body.status,
+            checks: (body.checks ?? {}) as ReadinessStatus['checks'],
+        };
+    }
+
+    throw toApiError(response, rawBody);
+}
+

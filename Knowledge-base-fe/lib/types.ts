@@ -128,3 +128,62 @@ export interface ChatResponse {
     sources?: ChatSource[]
     metadata?: ChatMetadata
 }
+
+// ------------------------------
+// Documents & health (KB-4.5) — khớp endpoint thật của BE Phase 3
+// ------------------------------
+
+/** `GET /documents/status` — số **chunk** đang có trong vector store. */
+export interface DocumentStatus {
+    collection_name: string
+    document_count: number
+    /** `healthy` (có chunk) · `empty` (0 chunk) · `error` (Chroma lỗi — kèm `error`). */
+    status: string
+    error?: string
+}
+
+export interface SupportedFileInfo {
+    name: string
+    path: string
+    size_mb: number
+    extension: string
+}
+
+/** `GET /documents/folder-info` — đếm file trên đĩa (không suy từ số chunk). */
+export interface FolderInfo {
+    folder_path: string
+    exists: boolean
+    total_files?: number
+    files_by_extension?: Record<string, number>
+    supported_files_count?: number
+    /** BE chỉ trả 20 file đầu để hiển thị. */
+    supported_files?: SupportedFileInfo[]
+    auto_load_enabled?: boolean
+}
+
+export interface ReadinessCheck {
+    ok: boolean
+    detail: string
+}
+
+/** `GET /ready` — `ok` (200) · `degraded` (200, thiếu/empty index) · `error` (503). */
+export interface ReadinessStatus {
+    status: string
+    checks: Record<string, ReadinessCheck>
+}
+
+/** `GET /health` — liveness, luôn 200 khi process còn sống. */
+export interface HealthStatus {
+    status: string
+    version: string
+    uptime_seconds: number
+}
+
+/** `POST /documents/refresh` — re-index toàn bộ folder tài liệu. */
+export interface DocumentsRefreshResult {
+    success: boolean
+    message: string
+    processed_files: number
+    total_chunks: number
+    details?: Array<Record<string, unknown>>
+}

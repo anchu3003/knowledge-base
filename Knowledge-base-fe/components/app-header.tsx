@@ -2,61 +2,21 @@
 
 import {RoleBadge} from './role-badge';
 import {Button} from '@/components/ui/button';
-import {LogOut} from 'lucide-react';
+import {Database, LogOut} from 'lucide-react';
 import Link from 'next/link';
 
 export type UserRole = "admin" | "developer"
 
+interface AppHeaderProps {
+    /** Mở drawer "Kho tài liệu" (KB-4.5). Trước đây header gọi thẳng `fetch` tới BE — đã bỏ. */
+    onOpenDocuments?: () => void;
+}
 
-export function AppHeader() {
+export function AppHeader({onOpenDocuments}: AppHeaderProps) {
     const user: { name: string, role: UserRole } | null = {
         name: 'An Chu',
         role: 'developer'
     }
-
-    const getNavItems = () => {
-        if (!user) return [];
-
-        const baseItems = [
-            {label: 'Refresh', href: 'http://localhost:8000/documents/refresh'},
-            {label: 'Clear', href: 'http://localhost:8000/documents/clear'},
-        ];
-        // if (user.role === 'admin') {
-        //     return [
-        //         ...baseItems,
-        //         {label: 'Settings', href: '/settings'},
-        //     ];
-        // }
-        return [...baseItems];
-    };
-
-    const handleClickMenu = async (
-        label: string
-    ) => {
-        let link = "";
-        let method = "GET";
-        switch (label) {
-            case 'Refresh':
-                link = "http://localhost:8000/documents/refresh";
-                method = "POST";
-                break;
-            case 'Clear':
-                link = "http://localhost:8000/documents/clear";
-                method = "DELETE";
-                break;
-        }
-        try {
-            await fetch(link, {
-                method: method,
-                headers: {'Content-Type': 'application/json'}
-            });
-        } catch (error) {
-            console.error('Error submitting request:', error);
-            throw error;
-        }
-    };
-
-    const navItems = getNavItems();
 
     return (
         <header className="border-b border-border bg-background sticky top-0 z-50">
@@ -70,14 +30,13 @@ export function AppHeader() {
                         <span className="font-bold text-lg hidden sm:inline"> Knowledge Navigator </span>
                     </Link>
 
-                    {/* Desktop Navigation */}
+                    {/* Documents & health panel (KB-4.5) */}
                     <nav className="hidden md:flex items-left gap-1">
-                        {navItems.map((item) => (
-                            <Link key={item.label} onClick={() => handleClickMenu(item.label)} href={"/"}
-                                  className="px-3 py-2 text-sm font-medium hover:bg-muted rounded-md">
-                                {item.label}
-                            </Link>
-                        ))}
+                        <Button variant="ghost" size="sm" onClick={onOpenDocuments}
+                                className="gap-2" aria-label="Mở kho tài liệu">
+                            <Database className="h-4 w-4"/>
+                            <span className="text-sm font-medium">Kho tài liệu</span>
+                        </Button>
                     </nav>
 
                     {/* User Info & Logout */}
