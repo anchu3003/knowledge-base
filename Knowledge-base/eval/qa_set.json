@@ -1,7 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "created": "2026-11-07",
-  "notes": "Golden set cho eval retrieval + grounding (KB-2.1). expected_files tính từ DOCUMENTS_FOLDER (Interview/). Keyword dùng để đo answer_keyword_hit ở --mode full; không phải điều kiện pass/fail.",
+  "updated": "2026-11-07",
+  "notes": "Golden set cho eval retrieval + grounding. v2 (KB-2.4): user dọn corpus Interview/ còn Backend&Devops ⇒ bỏ 5 câu trỏ tài liệu đã xoá (React Router, CSS, Vuex, English, Spring Boot Q&A), thêm 5 câu từ tài liệu còn lại. expected_files tính từ DOCUMENTS_FOLDER (Interview/).",
   "items": [
     {
       "id": "q01",
@@ -47,9 +48,9 @@
     },
     {
       "id": "q08",
-      "question": "Có mấy cách implement Dependency Injection trong Spring Framework?",
-      "expected_files": ["Interview Q&A/Spring Boot Q&A.md"],
-      "expected_keywords": ["dependency injection"]
+      "question": "Sự khác nhau giữa @BeforeEach và @BeforeAll trong JUnit 5 là gì?",
+      "expected_files": ["Backend&Devops/Java/JUnit 5.md"],
+      "expected_keywords": ["beforeeach", "beforeall"]
     },
     {
       "id": "q09",
@@ -59,21 +60,21 @@
     },
     {
       "id": "q10",
-      "question": "Trong React Router v6, Link khác thẻ a ở điểm nào?",
-      "expected_files": ["Frontend/ReactJS/React Router version 6.md"],
-      "expected_keywords": ["link"]
+      "question": "Discovery server (Eureka naming server) có những chức năng chính nào?",
+      "expected_files": ["Backend&Devops/Microservices/Discovery Server.md"],
+      "expected_keywords": ["service registration", "discovery"]
     },
     {
       "id": "q11",
-      "question": "Làm sao căn giữa một element bằng CSS?",
-      "expected_files": ["Frontend/CSS/How to Center an Element with CSS.md"],
-      "expected_keywords": ["position"]
+      "question": "Spring Cloud Config Server dùng để làm gì?",
+      "expected_files": ["Backend&Devops/Microservices/Config Server.md"],
+      "expected_keywords": ["config"]
     },
     {
       "id": "q12",
-      "question": "Vuex trong VueJS dùng để làm gì?",
-      "expected_files": ["Frontend/VueJs/Vuex- State management.md"],
-      "expected_keywords": ["vuex", "store"]
+      "question": "Phân biệt stateless và stateful authentication trong Spring Security?",
+      "expected_files": ["Backend&Devops/Java/Spring Projects/Spring Security.md"],
+      "expected_keywords": ["stateless"]
     },
     {
       "id": "q13",
@@ -89,9 +90,9 @@
     },
     {
       "id": "q15",
-      "question": "Câu \"That's sound good\" nghĩa là gì trong tiếng Việt?",
-      "expected_files": ["English/Pharses.md"],
-      "expected_keywords": ["hay", "tất nhiên"]
+      "question": "RabbitMQ là gì và exchange có vai trò gì trong RabbitMQ?",
+      "expected_files": ["Backend&Devops/Messaging/Rabitmq.md"],
+      "expected_keywords": ["exchange"]
     }
   ]
 }

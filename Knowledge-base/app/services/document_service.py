@@ -17,7 +17,10 @@ from langchain_community.document_loaders import (
 )
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
+from langchain_text_splitters import (
+    MarkdownHeaderTextSplitter,
+    RecursiveCharacterTextSplitter,
+)
 
 from app.core.config import Settings
 from app.core.embeddings import build_embedding_params
@@ -181,9 +184,8 @@ class DocumentService:
             loop = asyncio.get_event_loop()
             documents = await loop.run_in_executor(self.executor, lambda x: loader.load(), None)
 
-            # Split documents into chunks
-            splitter = self.get_splitter(file_path)
-            chunks = splitter.split_documents(documents)
+            # Split documents into chunks (KB-2.4: .md tách theo heading rồi mới cắt theo size)
+            chunks = self._split_documents(file_path, documents)
 
             # Add metadata. `chunk_index` phải đếm **theo file** (dùng cho chunk_id ổn định, KB-2.2).
             for idx, chunk in enumerate(chunks):
@@ -200,6 +202,43 @@ class DocumentService:
         except Exception as e:
             logger.error(f"Error processing file {file_path}: {str(e)}")
             raise
+
+    def _split_documents(self, file_path: Path, documents: List[Document]) -> List[Document]:
+        """Tách chunk theo loại file (KB-2.4).
+
+        - `.md` → tách theo heading (giữ `heading_path`), rồi cắt mỗi section theo `CHUNK_SIZE`.
+        - loại khác → splitter như cũ.
+        """
+        if file_path.suffix.lower() == ".md":
+            return self._split_markdown(documents)
+        return self.get_splitter(file_path).split_documents(documents)
+
+    def _split_markdown(self, documents: List[Document]) -> List[Document]:
+        """Markdown: tách theo heading H1–H3 rồi cắt mỗi section theo size (KB-2.4).
+
+        `MarkdownHeaderTextSplitter` **không** giới hạn size ⇒ bắt buộc split lại bằng
+        `RecursiveCharacterTextSplitter`, nếu không section dài (file 20KB) sẽ vượt budget context.
+        """
+        header_splitter = MarkdownHeaderTextSplitter(
+            headers_to_split_on=[("#", "h1"), ("##", "h2"), ("###", "h3")],
+        )
+
+        chunks: List[Document] = []
+        for document in documents:
+            for section in header_splitter.split_text(document.page_content):
+                heading_path = " > ".join(
+                    filter(None, [
+                        section.metadata.get("h1"),
+                        section.metadata.get("h2"),
+                        section.metadata.get("h3"),
+                    ])
+                )
+                section_doc = Document(
+                    page_content=section.page_content,
+                    metadata={**document.metadata, "heading_path": heading_path},
+                )
+                chunks.extend(self.text_splitter.split_documents([section_doc]))
+        return chunks
 
     @staticmethod
     def get_loader(file_path: Path):
@@ -220,15 +259,12 @@ class DocumentService:
             raise ValueError(f"Unsupported file type: {extension}")
 
     def get_splitter(self, file_path: Path):
-        """Pick the best text splitter based on the file type."""
+        """Pick the best text splitter based on the file type.
+
+        `.md` KHÔNG dùng hàm này — markdown được tách theo heading trong `_split_markdown` (KB-2.4).
+        """
         ext = file_path.suffix.lower()
-        if ext == ".md":
-            # Preserve Markdown structure for better semantic chunks
-            return MarkdownTextSplitter(
-                chunk_size=self.settings.chunk_size,
-                chunk_overlap=self.settings.chunk_overlap
-            )
-        elif ext in (".docx", ".pdf"):
+        if ext in (".docx", ".pdf"):
             # Slightly conservative splitting works well for OCR/page artifacts
             return RecursiveCharacterTextSplitter(
                 chunk_size=self.settings.chunk_size,
