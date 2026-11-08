@@ -5,7 +5,7 @@
  * của BE), và `retryable` quyết định có hiện nút "Thử lại" hay không.
  */
 
-import { ApiError, NETWORK_ERROR_CODE } from './api';
+import { API_BASE_URL, ApiError, NETWORK_ERROR_CODE } from './api';
 
 export interface ApiErrorView {
     /** Mã lỗi (hằng số từ BE, hoặc `network_error` do FE sinh). */
@@ -29,7 +29,8 @@ interface CodeView {
 const CODE_VIEWS: Record<string, CodeView> = {
     network_error: {
         message: 'Không kết nối được tới server.',
-        hint: 'Kiểm tra backend đang chạy (mặc định http://localhost:8000) rồi thử lại.',
+        // KB-4.7: dùng đúng URL đã build (compose chạy BE ở 8010, dev ở 8000) thay vì hardcode
+        hint: `Kiểm tra backend đang chạy (${API_BASE_URL}) rồi thử lại.`,
         retryable: true,
     },
     request_timeout: {

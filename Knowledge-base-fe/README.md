@@ -30,8 +30,10 @@ xem KB-4.7).
 docker build --build-arg NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000 -t kb-fe:local .
 docker run -p 3000:3000 kb-fe:local      # mở http://localhost:3000
 
-# Hoặc chạy cả BE + FE từ repo BE
+# Hoặc chạy cả BE + FE từ repo BE (host port: FE 3010, BE 8010 — dời để không trùng project khác) (port host: FE 3010, BE 8010 — dời để không trùng project khác)
 cd ../Knowledge-base && docker compose up -d --build && docker compose ps
+# → UI: http://localhost:3010 · API docs: http://localhost:8010/docs
+# → UI: http://localhost:3010 · API: http://localhost:8010/docs
 ```
 
 - Image có `HEALTHCHECK` (dùng `node -e fetch(...)`, `node:20-slim` không có `curl`) ⇒ container lên `healthy`.
