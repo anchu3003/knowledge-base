@@ -88,7 +88,7 @@ async function overflowReport(page: Page) {
  * KHÔNG bắt được ⇒ phải so sánh trực tiếp kích thước. */
 async function expectSourcesWithinColumn(page: Page) {
     const sources = page.locator('[aria-label="Nguồn tham khảo"]');
-    const composer = page.locator('textarea[aria-label="Câu hỏi"]');
+    const composer = page.getByTestId('composer-row');
     const sourcesBox = await sources.boundingBox();
     const composerBox = await composer.boundingBox();
     expect(sourcesBox, 'sources panel').not.toBeNull();
@@ -243,3 +243,62 @@ test.describe('Panel Nguồn', () => {
         await expectSourcesWithinColumn(page);
         await page.screenshot({path: 'test-results/shot-07-1900-sources.png'});
     });
+test.describe('Canh mép cột chat', () => {
+    test('composer + panel Nguồn thẳng mép bubble (trái = AI, phải = "Bạn"), composer thấp', async ({page}) => {
+        await seedSession(page, {
+            title: 'Canh mép',
+            question: 'Câu hỏi canh mép',
+            answer: 'Trả lời để đo mép bubble của AI',
+            sources: [
+                {
+                    citation_id: 'S1',
+                    chunk_id: 'aaaaaaaaaaaaaaa1',
+                    file_name: 'Design patterns & Architecture.md',
+                    file_path: 'Interview/Backend&Devops/Design patterns & Architecture.md',
+                    file_type: 'md',
+                    relevance_score: 0.083,
+                    heading_path: 'Design patterns > Creational',
+                    snippet: 'Design patterns are essential in Java backend development.',
+                },
+            ],
+        });
+        await page.goto('/');
+
+        const composer = page.getByTestId('composer-row');
+        const aiBubble = page.getByTestId('bubble-assistant');
+        const userBubble = page.getByTestId('bubble-user');
+        const sources = page.locator('[aria-label="Nguồn tham khảo"]');
+
+        await expect(composer).toBeVisible();
+        await expect(aiBubble).toBeVisible();
+        await expect(userBubble).toBeVisible();
+        await expect(sources).toBeVisible();
+
+        const [composerBox, aiBox, userBox, sourcesBox] = await Promise.all([
+            composer.boundingBox(),
+            aiBubble.boundingBox(),
+            userBubble.boundingBox(),
+            sources.boundingBox(),
+        ]);
+
+        // mép trái composer = mép trái bubble AI
+        expect(Math.abs(composerBox!.x - aiBox!.x), 'mép trái composer vs bubble AI').toBeLessThanOrEqual(1.5);
+        // mép phải composer = mép phải bubble "Bạn"
+        expect(
+            Math.abs(composerBox!.x + composerBox!.width - (userBox!.x + userBox!.width)),
+            'mép phải composer vs bubble Bạn',
+        ).toBeLessThanOrEqual(1.5);
+        // mép phải panel Nguồn = mép phải bubble "Bạn"
+        expect(
+            Math.abs(sourcesBox!.x + sourcesBox!.width - (userBox!.x + userBox!.width)),
+            'mép phải panel Nguồn vs bubble Bạn',
+        ).toBeLessThanOrEqual(1.5);
+
+        // composer gọn: ô nhập 1 dòng, không cao như textarea 2 dòng + nút lg
+        expect(composerBox!.height, 'chiều cao ô nhập').toBeLessThanOrEqual(42);
+        const sendBox = await page.getByRole('button', {name: 'Gửi câu hỏi'}).boundingBox();
+        expect(Math.abs(sendBox!.height - composerBox!.height), 'nút gửi cùng chiều cao ô nhập').toBeLessThanOrEqual(2);
+
+        await page.screenshot({path: 'test-results/shot-08-alignment.png'});
+    });
+});

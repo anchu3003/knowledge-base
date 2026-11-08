@@ -94,6 +94,7 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
 
                         <div className={`flex min-w-0 max-w-full flex-1 flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
                             <div
+                                data-testid={`bubble-${message.role}`}
                                 className={`w-fit max-w-[88%] rounded-2xl border px-3.5 py-2.5 shadow-xs ${
                                     isUser
                                         ? 'border-primary/30 bg-primary text-primary-foreground'
@@ -119,6 +120,8 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
                             {!isUser && <MessageActions content={message.content}/>}
 
                             {message.sources && message.sources.length > 0 && (
+                                // gutter phải = avatar (2.25rem) + gap (0.625rem) để cạnh phải thẳng mép bubble user
+                                <div className="w-full min-w-0 sm:pr-[2.875rem]">
                                 <SourcesPanel
                                     sources={message.sources}
                                     metadata={message.metadata}
@@ -129,6 +132,7 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
                                         citationFocus?.messageId === message.id ? citationFocus.nonce : undefined
                                     }
                                 />
+                                </div>
                             )}
                         </div>
                     </div>
