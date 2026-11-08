@@ -107,6 +107,20 @@ def distinct_file_ratio(hits: List[Dict[str, Any]]) -> float:
     return len(set(files)) / len(files)
 
 
+def precision_at_k(hits: List[Dict[str, Any]], expected_files: List[str]) -> float:
+    """Tỉ lệ hit trong top-k trỏ đúng file kỳ vọng (0..1). Đo trực tiếp "precision" của ngữ cảnh.
+
+    Precision cao ⇒ ít nguồn nhiễu được đưa vào prompt (quan trọng khi ưu tiên precision).
+    """
+    if not hits:
+        return 0.0
+    relevant = sum(
+        1 for hit in hits
+        if match_expected_files((hit.get("metadata") or {}).get("source", ""), expected_files)
+    )
+    return relevant / len(hits)
+
+
 def keyword_hit(answer: str, keywords: List[str]) -> bool:
     """True nếu câu trả lời chứa >= 1 keyword kỳ vọng (case-insensitive)."""
     if not keywords:
@@ -175,6 +189,7 @@ async def run_retrieval(settings, service, items: List[Dict[str, Any]]) -> List[
             "hit": hit,
             "rank": rank,
             "dup_ratio": round(duplicate_ratio(hits), 3),
+            "precision_at_k": round(precision_at_k(hits, item["expected_files"]), 3),
             "distinct_file_ratio": round(distinct_file_ratio(hits), 3),
             "latency": round(latency, 3),
             "top_files": [normalize_path((h.get("metadata") or {}).get("source", "")) for h in hits],
@@ -237,6 +252,7 @@ def summarize_retrieval(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "hit_at_k": round(sum(1 for r in ok if r["hit"]) / len(ok), 3) if ok else 0.0,
         "mrr": round(statistics.mean(ranks), 3) if ranks else 0.0,
         "dup_ratio": round(statistics.mean([r["dup_ratio"] for r in ok]), 3) if ok else 0.0,
+        "precision_at_k": round(statistics.mean([r["precision_at_k"] for r in ok]), 3) if ok else 0.0,
         "distinct_file_ratio": round(statistics.mean([r["distinct_file_ratio"] for r in ok]), 3) if ok else 0.0,
         "latency_p50": round(statistics.median([r["latency"] for r in ok]), 3) if ok else 0.0,
     }
