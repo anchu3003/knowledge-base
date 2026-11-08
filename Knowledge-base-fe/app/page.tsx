@@ -17,6 +17,12 @@ import {Square} from 'lucide-react';
 /** Key localStorage giữ `conversation_id` (Q&A KB-4.1: reload vẫn hỏi tiếp mạch). */
 const CONVERSATION_STORAGE_KEY = 'kb.conversation_id';
 
+/**
+ * `createdAt` của session khởi tạo — tính **1 lần lúc import** thay vì trong render.
+ * `react-hooks/purity` (KB-4.6) coi `Date.now()` trong render là impure ⇒ tách ra module scope.
+ */
+const INITIAL_SESSION_CREATED_AT = new Date(Date.now() - 86_400_000);
+
 interface Message {
     id: string;
     role: 'user' | 'assistant';
@@ -54,7 +60,7 @@ export default function ChatPage() {
         {
             id: 'session_1',
             title: 'Getting Started',
-            createdAt: new Date(Date.now() - 86400000),
+            createdAt: INITIAL_SESSION_CREATED_AT,
             messageCount: 1,
         },
     ]);

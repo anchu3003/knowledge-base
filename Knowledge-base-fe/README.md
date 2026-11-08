@@ -23,6 +23,23 @@ xem KB-4.7).
 - Nhãn `[S1]` → chip bấm được (`onCitationClick`), **trừ** khi nằm trong code fence/inline code.
   Việc nối chip → panel nguồn (scroll + highlight) ở **KB-4.3**.
 
+## Test / Lint / Typecheck (KB-4.6)
+
+```bash
+npm run test        # vitest run — 50 test, ~1.2s, KHÔNG cần BE/network (fetch được mock)
+npm run test:watch  # vitest ở chế độ watch
+npm run lint        # eslint . (flat config eslint-config-next, 0 error)
+npm run typecheck   # tsc --noEmit
+npm run build       # next build — CÓ type check thật (ignoreBuildErrors: false)
+```
+
+- Test nằm trong `tests/` (jsdom + `@testing-library/react`), setup chung `tests/setup.ts`
+  (stub `scrollIntoView`/`clipboard` vì jsdom không có). Alias `@/` khai báo trong `vitest.config.ts`.
+- Phạm vi: `lib/api.ts` (error envelope + `/ready` 503 + streaming), `lib/sse.ts` (parser + abort),
+  `lib/errors.ts` (code → message), `markdown-message` (code block/table/chip/XSS thành text),
+  `sources-panel` (3 chunk cùng file → 3 card, highlight), `documents-panel` (badge lỗi, gating `CLEAR`).
+- **Chưa có CI/CD** ⇒ 4 lệnh trên là bộ verify tay trước khi merge MR.
+
 ## Kho tài liệu & readiness (KB-4.5)
 
 - `components/documents-panel.tsx`: drawer mở từ header (**Kho tài liệu**) — chỉ fetch khi mở (không poll).

@@ -21,33 +21,6 @@ export interface AuthContextType {
     setUser: (user: User | null) => void
 }
 
-export interface Permission {
-    action: string
-    requiredRoles: UserRole[]
-}
-
-export interface ProtectedRouteProps {
-    requiredRoles: UserRole[]
-    children: React.ReactNode
-    fallback?: React.ReactNode
-}
-
-export interface Feedback {
-    id: string
-    userId: string
-    category: "bug" | "suggestion" | "feature_request"
-    message: string
-    sentiment?: "positive" | "negative" | "neutral"
-    createdAt: Date
-    resolved?: boolean
-}
-
-export interface FeedbackContextType {
-    feedbacks: Feedback[]
-    addFeedback: (feedback: Omit<Feedback, "id" | "createdAt">) => Promise<void>
-    isLoading: boolean
-}
-
 export interface DocumentTemplate {
     id: string
     name: string
