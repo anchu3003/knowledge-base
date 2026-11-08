@@ -88,6 +88,20 @@ export interface ChatMetadata {
     [key: string]: unknown
 }
 
+/** Một message trong khung chat (client-side; BE chỉ giữ `conversation_id` + history nội bộ). */
+export interface ChatMessage {
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+    citations?: Array<{ id: string; title: string; source: string; relevance: number }>
+    sources?: ChatSource[]
+    metadata?: ChatMetadata
+    /** Đang stream token (KB-4.4) — không lưu vào `localStorage`. */
+    isStreaming?: boolean
+    /** Người dùng bấm Stop giữa lúc stream (KB-4.4). */
+    stopped?: boolean
+}
+
 export interface ChatRequest {
     message: string
     conversation_id?: string

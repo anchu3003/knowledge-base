@@ -1,6 +1,6 @@
 'use client';
 
-import {Database, MessageSquare, Plus, Trash2} from 'lucide-react';
+import {MessageSquare, Plus, Trash2} from 'lucide-react';
 
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -15,6 +15,7 @@ import {Separator} from '@/components/ui/separator';
  * - Mobile (<768px): cùng nội dung render trong `Sheet` (drawer trượt từ trái) ở `app-header.tsx`.
  *
  * ⇒ tách `SidebarContent` (thuần props, không tự định vị) khỏi `AppSidebar` (khung cột).
+ * *KB-4.9: bỏ nút "Kho tài liệu" ở đây — trùng với nút ở header (chỉ giữ 1 chỗ, góc trên phải).*
  */
 
 export interface ChatSession {
@@ -30,8 +31,6 @@ export interface SidebarContentProps {
     onSelectSession: (sessionId: string) => void;
     onNewChat: () => void;
     onDeleteSession: (sessionId: string) => void;
-    /** Mở drawer "Kho tài liệu" (KB-4.5) */
-    onOpenDocuments?: () => void;
     /** Đóng drawer mobile sau khi chọn (Sheet); desktop không truyền ⇒ no-op */
     onAfterAction?: () => void;
 }
@@ -42,7 +41,6 @@ export function SidebarContent({
                                    onSelectSession,
                                    onNewChat,
                                    onDeleteSession,
-                                   onOpenDocuments,
                                    onAfterAction,
                                }: SidebarContentProps) {
     const handle = (action: () => void) => () => {
@@ -86,20 +84,6 @@ export function SidebarContent({
                     ))}
                 </ul>
             </ScrollArea>
-
-            <Separator/>
-
-            <div className="p-3">
-                <Button
-                    variant="outline"
-                    className="w-full justify-start gap-2"
-                    onClick={handle(() => onOpenDocuments?.())}
-                    aria-label="Mở kho tài liệu"
-                >
-                    <Database className="size-4"/>
-                    Kho tài liệu
-                </Button>
-            </div>
         </div>
     );
 }

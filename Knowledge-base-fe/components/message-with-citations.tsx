@@ -58,29 +58,14 @@ export function MessageWithCitations({
         }
     };
     return (
-        <div className="relative space-y-3">
-            {/* KB-4.8: bỏ bubble riêng ở đây — `ChatMessages` đã là bubble ⇒ tránh "bubble lồng bubble" + `max-w-md` */}
-            <div className="relative">
-                {/* Actions: copy */}
-                {!isUser && (
-                    <button
-                        onClick={handleCopy}
-                        aria-label="Sao chép câu trả lời"
-                        className="absolute top-1 right-1 z-30 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60"
-                        title="Sao chép câu trả lời"
-                    >
-                        <Copy className="h-3.5 w-3.5"/>
-                        <span>{copied ? 'Đã chép' : 'Sao chép'}</span>
-                    </button>
+        <div className="relative space-y-2">
+            {/* KB-4.9: nút "Sao chép" chuyển xuống dưới nội dung, chỉ hiện khi hover/focus ⇒ không đè lên chữ */}
+            <div>
+                {isUser ? (
+                    <p className="break-words whitespace-pre-wrap">{content}</p>
+                ) : (
+                    <MarkdownMessage content={content} onCitationClick={onCitationClick}/>
                 )}
-
-                <div className="pr-16">
-                    {isUser ? (
-                        <p className="break-words whitespace-pre-wrap">{content}</p>
-                    ) : (
-                        <MarkdownMessage content={content} onCitationClick={onCitationClick}/>
-                    )}
-                </div>
                 {isStreaming && <TypingIndicator/>}
                 {stopped && !isStreaming && (
                     <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">
@@ -88,6 +73,20 @@ export function MessageWithCitations({
                     </p>
                 )}
             </div>
+
+            {!isUser && (
+                <div className="flex justify-end">
+                    <button
+                        onClick={handleCopy}
+                        aria-label="Sao chép câu trả lời"
+                        className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        title="Sao chép câu trả lời"
+                    >
+                        <Copy className="h-3 w-3"/>
+                        <span>{copied ? 'Đã chép' : 'Sao chép'}</span>
+                    </button>
+                </div>
+            )}
 
             {/* Sources (new format) */}
             {!isUser && sources.length > 0 && (
