@@ -13,6 +13,16 @@ NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000
 `NEXT_PUBLIC_*` được **nhúng vào bundle lúc build** ⇒ đổi URL phải `npm run build` lại (Docker: `--build-arg`,
 xem KB-4.7).
 
+## Markdown & citation chip (KB-4.2)
+
+- Câu trả lời của assistant render bằng `components/markdown-message.tsx`: `react-markdown` + `remark-gfm`
+  (table/strikethrough/task list) + `rehype-highlight` (syntax highlighting) — **không** dùng
+  `dangerouslySetInnerHTML` ⇒ HTML thô trong nội dung hiện ra dạng text (XSS an toàn).
+- Code block có label ngôn ngữ + nút **Copy**; table scroll ngang; token màu định nghĩa trong `app/globals.css`
+  (`.md-code .hljs-*`, có cả light/dark) — không phụ thuộc CSS theme ngoài.
+- Nhãn `[S1]` → chip bấm được (`onCitationClick`), **trừ** khi nằm trong code fence/inline code.
+  Việc nối chip → panel nguồn (scroll + highlight) ở **KB-4.3**.
+
 ## API client & hiển thị lỗi (KB-4.1)
 
 - Mọi call backend đi qua `lib/api.ts` (`apiFetch`, `postChat`) — **không** gọi `fetch` inline trong page.

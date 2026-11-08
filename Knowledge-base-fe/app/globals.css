@@ -295,3 +295,125 @@
         @apply focus:ring-2 focus:ring-primary focus:ring-offset-0 focus:border-primary transition-all duration-300 ease-in-out;
     }
 }
+
+/* ==========================================
+   Markdown message + code highlight (KB-4.2)
+   Không dùng tailwind-typography (không có trong deps) ⇒ style tường minh.
+   `.md-code` bọc code block; `.hljs-*` là token do rehype-highlight sinh ra.
+   ========================================== */
+.md-body p {
+    margin: 0.35rem 0;
+}
+
+.md-body > *:first-child {
+    margin-top: 0;
+}
+
+.md-body > *:last-child {
+    margin-bottom: 0;
+}
+
+.md-code code {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre;
+    color: oklch(0.25 0.02 260);
+}
+
+.dark .md-code code {
+    color: oklch(0.92 0.01 260);
+}
+
+/* Token colors — tuned cho cả light và dark của app */
+.md-code .hljs-comment,
+.md-code .hljs-quote {
+    color: oklch(0.55 0.02 260);
+    font-style: italic;
+}
+
+.md-code .hljs-keyword,
+.md-code .hljs-selector-tag,
+.md-code .hljs-literal,
+.md-code .hljs-section,
+.md-code .hljs-doctag,
+.md-code .hljs-type {
+    color: oklch(0.55 0.22 330);
+}
+
+.md-code .hljs-string,
+.md-code .hljs-regexp,
+.md-code .hljs-addition,
+.md-code .hljs-attribute,
+.md-code .hljs-meta .hljs-string {
+    color: oklch(0.5 0.14 150);
+}
+
+.md-code .hljs-number,
+.md-code .hljs-symbol,
+.md-code .hljs-bullet,
+.md-code .hljs-variable,
+.md-code .hljs-template-variable,
+.md-code .hljs-link {
+    color: oklch(0.55 0.16 60);
+}
+
+.md-code .hljs-title,
+.md-code .hljs-title.function_,
+.md-code .hljs-title.class_,
+.md-code .hljs-built_in,
+.md-code .hljs-name {
+    color: oklch(0.5 0.18 255);
+}
+
+.md-code .hljs-attr,
+.md-code .hljs-property {
+    color: oklch(0.5 0.15 200);
+}
+
+.md-code .hljs-emphasis {
+    font-style: italic;
+}
+
+.md-code .hljs-strong {
+    font-weight: 600;
+}
+
+.dark .md-code .hljs-comment,
+.dark .md-code .hljs-quote {
+    color: oklch(0.68 0.02 260);
+}
+
+.dark .md-code .hljs-keyword,
+.dark .md-code .hljs-selector-tag,
+.dark .md-code .hljs-literal,
+.dark .md-code .hljs-section,
+.dark .md-code .hljs-doctag,
+.dark .md-code .hljs-type {
+    color: oklch(0.78 0.16 330);
+}
+
+.dark .md-code .hljs-string,
+.dark .md-code .hljs-regexp,
+.dark .md-code .hljs-addition,
+.dark .md-code .hljs-attribute {
+    color: oklch(0.8 0.14 150);
+}
+
+.dark .md-code .hljs-number,
+.dark .md-code .hljs-symbol,
+.dark .md-code .hljs-bullet,
+.dark .md-code .hljs-variable,
+.dark .md-code .hljs-template-variable,
+.dark .md-code .hljs-link {
+    color: oklch(0.82 0.15 75);
+}
+
+.dark .md-code .hljs-title,
+.dark .md-code .hljs-title.function_,
+.dark .md-code .hljs-title.class_,
+.dark .md-code .hljs-built_in,
+.dark .md-code .hljs-name,
+.dark .md-code .hljs-attr,
+.dark .md-code .hljs-property {
+    color: oklch(0.8 0.12 230);
+}

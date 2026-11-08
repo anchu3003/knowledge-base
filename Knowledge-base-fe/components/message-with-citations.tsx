@@ -3,6 +3,7 @@
 import {Card, CardContent} from '@/components/ui/card';
 import {Copy, ExternalLink} from 'lucide-react';
 import {TypingIndicator} from './typing-indicator';
+import {MarkdownMessage} from './markdown-message';
 import {useState} from 'react';
 
 interface Citation {
@@ -17,7 +18,11 @@ interface Source {
     file_name: string;
     file_type: string;
     relevance_score: number;
-    content_preview: string;
+    content_preview?: string;
+    snippet?: string;
+    citation_id?: string;
+    chunk_id?: string;
+    heading_path?: string;
 }
 
 interface MessageWithCitationsProps {
@@ -26,6 +31,8 @@ interface MessageWithCitationsProps {
     citations?: Citation[];
     sources?: Source[];
     isUser?: boolean;
+    /** Bấm chip `[S#]` trong câu trả lời (KB-4.2; KB-4.3 nối vào panel nguồn). */
+    onCitationClick?: (citationId: string) => void;
 }
 
 export function MessageWithCitations({
@@ -34,56 +41,17 @@ export function MessageWithCitations({
                                          citations = [],
                                          sources = [],
                                          isUser = false,
+                                         onCitationClick,
                                      }: MessageWithCitationsProps) {
     const [copied, setCopied] = useState(false);
-
-    // Small, safe formatter: escape HTML and apply light markdown-like transforms
-    const escapeHtml = (unsafe: string) =>
-        unsafe
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-
-    const linkify = (text: string) => {
-        const urlRegex = /(https?:\/\/\S+)/g;
-        return text.replace(
-            urlRegex,
-            (url) =>
-                `<a href="${url}" target="_blank" rel="noreferrer" class="underline text-primary">${url}</a>`
-        );
-    };
-
-    const simpleMarkdown = (text: string) => {
-        // bold **text**
-        let s = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        // italic *text*
-        s = s.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        // inline code `code`
-        s = s.replace(
-            /`([^`]+)`/g,
-            '<code class="rounded bg-muted/50 px-1 py-0.5 text-[0.85em]">$1</code>'
-        );
-        return s;
-    };
-
-    const formatContent = (text: string) => {
-        if (!text) return '';
-        const escaped = escapeHtml(text);
-        const withLinks = linkify(escaped);
-        const withMd = simpleMarkdown(withLinks);
-        // preserve paragraphs
-        return withMd.replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br />');
-    };
 
     const handleCopy = async () => {
         try {
             await navigator.clipboard.writeText(content);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch (e) {
-            // ignore
+        } catch {
+            // clipboard bị chặn — bỏ qua
         }
     };
     return (
@@ -114,11 +82,14 @@ export function MessageWithCitations({
                     style={{
                         marginTop: !isUser ? '20px' : '0',
                     }}
-                    className="prose max-w-none text-sm leading-relaxed pr-10"
-                    dangerouslySetInnerHTML={{
-                        __html: `<p>${formatContent(content)}</p>`,
-                    }}
-                />
+                    className="max-w-none pr-10 text-sm leading-relaxed"
+                >
+                    {isUser ? (
+                        <p className="whitespace-pre-wrap break-words">{content}</p>
+                    ) : (
+                        <MarkdownMessage content={content} onCitationClick={onCitationClick}/>
+                    )}
+                </div>
                 {isStreaming && <TypingIndicator/>}
             </div>
 
