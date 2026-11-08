@@ -23,6 +23,22 @@ xem KB-4.7).
 - Nhãn `[S1]` → chip bấm được (`onCitationClick`), **trừ** khi nằm trong code fence/inline code.
   Việc nối chip → panel nguồn (scroll + highlight) ở **KB-4.3**.
 
+## Docker (KB-4.7)
+
+```bash
+# Build image với URL BE nhúng vào bundle (NEXT_PUBLIC_* chỉ đọc được LÚC BUILD)
+docker build --build-arg NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000 -t kb-fe:local .
+docker run -p 3000:3000 kb-fe:local      # mở http://localhost:3000
+
+# Hoặc chạy cả BE + FE từ repo BE
+cd ../Knowledge-base && docker compose up -d --build && docker compose ps
+```
+
+- Image có `HEALTHCHECK` (dùng `node -e fetch(...)`, `node:20-slim` không có `curl`) ⇒ container lên `healthy`.
+- `.dockerignore` chặn `node_modules`/`.next`/`.env*` khỏi build context.
+- Đổi `NEXT_PUBLIC_API_PROXY_URL` ⇒ **build lại image**; `docker run -e ...` không có tác dụng.
+- `NEXT_PUBLIC_STREAMING=false` cũng truyền được qua `--build-arg` để tắt SSE trong bundle.
+
 ## Test / Lint / Typecheck (KB-4.6)
 
 ```bash

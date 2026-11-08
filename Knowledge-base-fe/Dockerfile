@@ -21,6 +21,15 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# KB-4.7: `NEXT_PUBLIC_*` được NHÚNG vào bundle lúc build ⇒ phải truyền bằng `--build-arg`
+# (truyền `-e` lúc `docker run` là vô nghĩa). Mặc định = BE trên máy host (browser gọi trực tiếp).
+ARG NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000
+ARG NEXT_PUBLIC_STREAMING=true
+ENV NEXT_PUBLIC_API_PROXY_URL=$NEXT_PUBLIC_API_PROXY_URL
+ENV NEXT_PUBLIC_STREAMING=$NEXT_PUBLIC_STREAMING
+ENV NEXT_TELEMETRY_DISABLED=1
+
 # Build the app
 RUN npm run build
 
@@ -45,5 +54,10 @@ COPY --chown=node:node next.config.mjs ./next.config.mjs
 # Set the port Next.js listens on
 EXPOSE 3000
 
-# Start Next.js in production mode
-CMD ["node_modules/.bin/next", "start", "-p", "3000"]
+# KB-4.7: healthcheck — `node:20-slim` KHÔNG có `curl` ⇒ dùng `node` (có `fetch` từ Node 18).
+# `/` là trang tĩnh (○ Static) nên 200 là đủ chứng minh server phục vụ được.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+# Start Next.js in production mode (bind 0.0.0.0 để container expose ra ngoài)
+CMD ["node_modules/.bin/next", "start", "-p", "3000", "-H", "0.0.0.0"]
