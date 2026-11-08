@@ -23,6 +23,19 @@ xem KB-4.7).
 - Nhãn `[S1]` → chip bấm được (`onCitationClick`), **trừ** khi nằm trong code fence/inline code.
   Việc nối chip → panel nguồn (scroll + highlight) ở **KB-4.3**.
 
+## Kho tài liệu & readiness (KB-4.5)
+
+- `components/documents-panel.tsx`: drawer mở từ header (**Kho tài liệu**) — chỉ fetch khi mở (không poll).
+  Tách `DocumentsPanelContent` (thuần props, SSR test được) khỏi `DocumentsPanel` (fetch/state).
+- Dữ liệu: `/documents/status` (`document_count`, `collection_name`, `status`) + `/documents/folder-info`
+  (`total_files`, `supported_files_count`, `folder_path`) + `/ready` (badge `ok`/`degraded`/`error` + **tên các
+  check fail**). `/ready` trả **503** mà vẫn có payload ⇒ `getReady()` đọc body trước, không ném lỗi.
+- **Refresh index**: confirm → `POST /documents/refresh` (timeout riêng **30 phút**, `REQUEST_TIMEOUT_CODE` nếu quá)
+  → hiện `processed_files`/`total_chunks` rồi tải lại trạng thái.
+- **Clear**: phải **gõ `CLEAR`** mới bấm được (Q&A KB-4.5 Q2) → `DELETE /documents/clear`.
+- Lỗi hiện theo banner KB-4.1 (`describeApiError`: `code` + message + hint + `request_id`).
+- Header **không còn** gọi thẳng `fetch` tới `/documents/refresh|clear` như trước.
+
 ## Streaming SSE + nút Stop (KB-4.4)
 
 - `lib/sse.ts`: parser SSE **thuần** (không `fetch`/DOM ⇒ test được bằng `node`) — tách frame theo `\n\n`,

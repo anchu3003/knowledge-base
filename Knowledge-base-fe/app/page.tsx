@@ -4,6 +4,7 @@ import {useEffect, useRef, useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {AppHeader} from '@/components/app-header';
+import {DocumentsPanel} from '@/components/documents-panel';
 import {MessageWithCitations} from '@/components/message-with-citations';
 import {SourcesPanel} from '@/components/sources-panel';
 import {PiiBadge} from '@/components/pii-badge';
@@ -88,6 +89,8 @@ export default function ChatPage() {
     const scrollRef = useRef<HTMLDivElement>(null);
     // KB-4.4: controller của request đang stream — nút Stop gọi `abort()`
     const abortRef = useRef<AbortController | null>(null);
+    // KB-4.5: drawer "Kho tài liệu" (status index + readiness + refresh/clear)
+    const [showDocumentsPanel, setShowDocumentsPanel] = useState(false);
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -412,7 +415,8 @@ export default function ChatPage() {
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
-            <AppHeader/>
+            <AppHeader onOpenDocuments={() => setShowDocumentsPanel(true)}/>
+            <DocumentsPanel open={showDocumentsPanel} onClose={() => setShowDocumentsPanel(false)}/>
 
             {/* Main Content */}
             <div

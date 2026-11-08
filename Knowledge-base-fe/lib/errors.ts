@@ -32,6 +32,11 @@ const CODE_VIEWS: Record<string, CodeView> = {
         hint: 'Kiểm tra backend đang chạy (mặc định http://localhost:8000) rồi thử lại.',
         retryable: true,
     },
+    request_timeout: {
+        message: 'Backend xử lý quá lâu nên FE đã ngừng chờ.',
+        hint: 'Re-index toàn bộ tài liệu có thể mất vài chục phút — xem log backend rồi kiểm tra lại trạng thái index.',
+        retryable: false,
+    },
     provider_rate_limited: {
         message: 'Đã chạm hạn mức của provider (Groq free tier).',
         hint: 'Chờ khoảng 30 giây rồi thử lại — quota theo phút.',
