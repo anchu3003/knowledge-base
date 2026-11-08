@@ -5,19 +5,10 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {MessageWithCitations} from '@/components/message-with-citations';
 import {PiiBadge} from '@/components/pii-badge';
 import {SourcesPanel} from '@/components/sources-panel';
-import type {ChatMetadata, ChatSource} from '@/lib/types';
+import type {ChatMessage} from '@/lib/types';
 
-export interface ChatMessage {
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    citations?: Array<{id: string; title: string; source: string; relevance: number}>;
-    sources?: ChatSource[];
-    metadata?: ChatMetadata;
-    isStreaming?: boolean;
-    /** Người dùng bấm **Stop** giữa lúc stream (KB-4.4) */
-    stopped?: boolean;
-}
+/** Message type sống ở `lib/types.ts` (KB-4.9: `lib/chat-store.ts` cũng cần) — re-export cho chỗ cũ. */
+export type {ChatMessage};
 
 /** Chip `[S#]` vừa bấm — panel nguồn của message đó scroll + highlight (KB-4.3). */
 export interface CitationFocus {
@@ -61,7 +52,7 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
 
                         <div className={`flex min-w-0 flex-1 flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
                             <div
-                                className={`w-full max-w-[calc(100%-1rem)] rounded-2xl border px-3.5 py-2.5 shadow-xs ${
+                                className={`w-full max-w-[calc(100%-1rem)] rounded-2xl border px-3.5 py-2.5 shadow-xs group ${
                                     isUser
                                         ? 'border-primary/30 bg-primary text-primary-foreground'
                                         : 'border-border bg-card text-card-foreground'

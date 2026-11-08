@@ -1,29 +1,30 @@
 'use client';
 
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useRef, useState, useSyncExternalStore} from 'react';
 
 import {AppHeader} from '@/components/app-header';
 import {AppSidebar, SidebarContent, type ChatSession} from '@/components/app-sidebar';
 import {ChatComposer} from '@/components/chat-composer';
-import {ChatMessages, type ChatMessage, type CitationFocus} from '@/components/chat-messages';
+import {ChatMessages, type CitationFocus} from '@/components/chat-messages';
 import {DocumentsPanel} from '@/components/documents-panel';
 import {ErrorBanner} from '@/components/error-banner';
 import {ScrollArea} from '@/components/ui/scroll-area';
+import {
+    MAX_SESSIONS,
+    deriveTitle,
+    getChatStoreServerSnapshot,
+    getChatStoreSnapshot,
+    setChatStore,
+    subscribeChatStore,
+    type ChatSessionRecord,
+} from '@/lib/chat-store';
 import {ApiError, STREAMING_ENABLED, StreamAbortedError, postChat, streamChat} from '@/lib/api';
 import {describeApiError, type ApiErrorView} from '@/lib/errors';
+import type {ChatMessage} from '@/lib/types';
 
-/** Key localStorage giữ `conversation_id` (Q&A KB-4.1: reload vẫn hỏi tiếp mạch). */
-const CONVERSATION_STORAGE_KEY = 'kb.conversation_id';
-
-/** Default khớp BE (`max_tokens=1000`) — bản onboarding gửi 500 (KB-4.9). */
+/** Default khớp BE (`max_tokens=1000`). */
 const DEFAULT_MAX_TOKENS = 1000;
 const DEFAULT_TEMPERATURE = 0.7;
-
-/**
- * `createdAt` của session khởi tạo — tính **1 lần lúc import** thay vì trong render.
- * `react-hooks/purity` (KB-4.6) coi `Date.now()` trong render là impure ⇒ tách ra module scope.
- */
-const INITIAL_SESSION_CREATED_AT = new Date(Date.now() - 86_400_000);
 
 const GREETING =
     'Chào bạn! Mình là trợ lý trên kho tài liệu cá nhân của bạn. Hỏi mình bất cứ điều gì về tài liệu đã nạp ' +
@@ -31,27 +32,45 @@ const GREETING =
 
 const INITIAL_MESSAGES: ChatMessage[] = [{id: 'greeting', role: 'assistant', content: GREETING}];
 
+let sessionSeq = 0;
+let messageSeq = 0;
+
 /**
- * Trang chat (KB-4.8 restructure).
+ * Sinh id message trong **event handler**. Đặt ở module scope để rule `react-hooks/purity` không coi
+ * `Date.now()` là impure trong thân component (compiler không phân biệt được handler vs render).
+ */
+function createMessageId(prefix: 'user' | 'assistant'): string {
+    messageSeq += 1;
+    return `${prefix}-${Date.now()}-${messageSeq}`;
+}
+
+/** Tạo session mới — gọi trong **event handler** (không phải render) nên `Date.now()` hợp lệ. */
+function buildSession(): ChatSessionRecord {
+    sessionSeq += 1;
+    return {
+        id: `session_${Date.now()}_${sessionSeq}`,
+        title: 'Cuộc trò chuyện mới',
+        createdAt: new Date().toISOString(),
+        messageCount: 0,
+        conversationId: null,
+        messages: INITIAL_MESSAGES,
+    };
+}
+
+/**
+ * Trang chat (KB-4.8 tách component, KB-4.9 chuyển state lịch sử sang `lib/chat-store.ts`).
  *
- * Chỉ giữ **state + logic** ở đây; phần hiển thị tách thành:
- * `AppHeader` (brand + theme + drawer mobile) · `AppSidebar` (sessions) · `ChatMessages` · `ChatComposer`
- * · `ErrorBanner` (KB-4.1) · `DocumentsPanel` (KB-4.5, giờ là `Sheet`).
+ * Lịch sử hội thoại **không** còn là state RAM trong `page.tsx`: nó nằm trong store ngoài React
+ * (in-memory + `localStorage`) và đọc bằng `useSyncExternalStore` ⇒ F5 không mất hội thoại, và
+ * `getServerSnapshot` rỗng nên SSR không lệch hydration.
  */
 export default function ChatPage() {
-    const [chatSessions, setChatSessions] = useState<ChatSession[]>([
-        {
-            id: 'session_1',
-            title: 'Cuộc trò chuyện đầu tiên',
-            createdAt: INITIAL_SESSION_CREATED_AT,
-            messageCount: 1,
-        },
-    ]);
-    const [currentSessionId, setCurrentSessionId] = useState('session_1');
-    const [chatHistory, setChatHistory] = useState<Record<string, ChatMessage[]>>({
-        session_1: INITIAL_MESSAGES,
-    });
-    const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
+    const store = useSyncExternalStore(subscribeChatStore, getChatStoreSnapshot, getChatStoreServerSnapshot);
+
+    const activeSession = store.sessions.find((session) => session.id === store.currentSessionId) ?? null;
+    const messages = activeSession && activeSession.messages.length > 0 ? activeSession.messages : INITIAL_MESSAGES;
+    const conversationId = activeSession?.conversationId ?? null;
+
     const [input, setInput] = useState('');
     const [maxTokens, setMaxTokens] = useState<number>(DEFAULT_MAX_TOKENS);
     const [temperature, setTemperature] = useState<number>(DEFAULT_TEMPERATURE);
@@ -61,48 +80,59 @@ export default function ChatPage() {
     const [apiError, setApiError] = useState<ApiErrorView | null>(null);
     // Câu hỏi của lần gửi lỗi gần nhất — dùng cho nút "Thử lại" (không nhân đôi message user)
     const [retryText, setRetryText] = useState<string | null>(null);
-    // `conversation_id` của BE, giữ qua reload bằng localStorage (Q&A KB-4.1)
-    const [conversationId, setConversationId] = useState<string | null>(null);
     // KB-4.3: chip `[S#]` nào vừa được bấm ⇒ panel nguồn của message đó scroll + highlight card
     const [citationFocus, setCitationFocus] = useState<CitationFocus | null>(null);
+    // KB-4.5: drawer "Kho tài liệu" (status index + readiness + refresh/clear)
+    const [showDocumentsPanel, setShowDocumentsPanel] = useState(false);
+
     const scrollRef = useRef<HTMLDivElement>(null);
     // KB-4.4: controller của request đang stream — nút Stop gọi `abort()`
     const abortRef = useRef<AbortController | null>(null);
-    // KB-4.5: drawer "Kho tài liệu" (status index + readiness + refresh/clear)
-    const [showDocumentsPanel, setShowDocumentsPanel] = useState(false);
 
     // Auto-scroll xuống cuối mỗi khi có message mới
     useEffect(() => {
         scrollRef.current?.scrollIntoView({behavior: 'smooth'});
     }, [messages]);
 
-    // Đồng bộ message hiện tại vào `chatHistory` của session đang mở
-    useEffect(() => {
-        if (currentSessionId && messages.length > 0) {
-            setChatHistory((prev) => ({...prev, [currentSessionId]: messages}));
-        }
-    }, [messages, currentSessionId]);
 
-    // Khôi phục `conversation_id` sau reload (chỉ đọc trong effect để không lệch SSR/hydration)
-    useEffect(() => {
-        try {
-            const stored = window.localStorage.getItem(CONVERSATION_STORAGE_KEY);
-            if (stored && stored.length > 0) {
-                setConversationId(stored);
-            }
-        } catch {
-            // localStorage bị chặn (private mode) — bỏ qua, dùng conversation_id do BE trả về
-        }
-    }, []);
+    /** Ghi messages của session đang mở; tự set title theo câu hỏi đầu tiên (KB-4.9). */
+    const setMessages = (updater: (previous: ChatMessage[]) => ChatMessage[]) => {
+        setChatStore((previous) => {
+            const active = previous.sessions.find((session) => session.id === previous.currentSessionId);
+            const base = active ?? buildSession();
+            const nextMessages = updater(base.messages.length > 0 ? base.messages : INITIAL_MESSAGES);
+            const nextSession: ChatSessionRecord = {
+                ...base,
+                messages: nextMessages,
+                messageCount: nextMessages.length,
+                title: deriveTitle(nextMessages),
+            };
+            const sessions = previous.sessions.some((session) => session.id === nextSession.id)
+                ? previous.sessions.map((session) => (session.id === nextSession.id ? nextSession : session))
+                : [nextSession, ...previous.sessions].slice(0, MAX_SESSIONS);
 
-    useEffect(() => {
-        if (!conversationId) return;
-        try {
-            window.localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationId);
-        } catch {
-            // bỏ qua
-        }
-    }, [conversationId]);
+            return {...previous, currentSessionId: nextSession.id, sessions};
+        });
+    };
+
+    /** Đảm bảo luôn có session đang mở trước khi ghi (lần đầu vào app chưa có session nào). */
+    const ensureActiveSession = () => {
+        setChatStore((previous) => {
+            if (previous.sessions.some((session) => session.id === previous.currentSessionId)) return previous;
+            const created = buildSession();
+            return {...previous, currentSessionId: created.id, sessions: [created, ...previous.sessions]};
+        });
+    };
+
+    /** `conversation_id` giờ thuộc **từng session** (KB-4.9) thay vì 1 key toàn cục. */
+    const setConversationId = (id: string | null) => {
+        setChatStore((previous) => ({
+            ...previous,
+            sessions: previous.sessions.map((session) =>
+                session.id === previous.currentSessionId ? {...session, conversationId: id} : session,
+            ),
+        }));
+    };
 
     const handleSendMessage = async () => {
         setFormError(null);
@@ -126,15 +156,16 @@ export default function ChatPage() {
         await submitQuestion(question, {appendUserMessage: true});
     };
 
-
     /** Cập nhật một message theo `id` (dùng cho từng token stream — KB-4.4). */
     const updateAssistant = (id: string, updater: (message: ChatMessage) => ChatMessage) => {
-        setMessages((prev) => prev.map((message) => (message.id === id ? updater(message) : message)));
+        setMessages((previous) => previous.map((message) => (message.id === id ? updater(message) : message)));
     };
 
     /** Bỏ bubble assistant rỗng (lỗi/Stop trước khi có token nào) — không để khung chat trống trơn. */
     const dropIfEmpty = (id: string) => {
-        setMessages((prev) => prev.filter((message) => !(message.id === id && message.content.trim().length === 0)));
+        setMessages((previous) =>
+            previous.filter((message) => !(message.id === id && message.content.trim().length === 0)),
+        );
     };
 
     /**
@@ -147,18 +178,11 @@ export default function ChatPage() {
     const submitQuestion = async (question: string, options: {appendUserMessage: boolean}) => {
         setApiError(null);
         setIsLoading(true);
+        ensureActiveSession();
 
         if (options.appendUserMessage) {
-            setMessages((prev) => [...prev, {id: Date.now().toString(), role: 'user', content: question}]);
-            setChatSessions((prev) =>
-                prev.map((session) =>
-                    session.id === currentSessionId
-                        ? {...session, messageCount: session.messageCount + 1}
-                        : session,
-                ),
-            );
+            setMessages((previous) => [...previous, {id: createMessageId('user'), role: 'user', content: question}]);
         }
-
         // ---- Fallback: blocking `/chat` khi NEXT_PUBLIC_STREAMING=false (hành vi KB-4.1) ----
         if (!STREAMING_ENABLED) {
             try {
@@ -177,7 +201,7 @@ export default function ChatPage() {
                 setMessages((prev) => [
                     ...prev,
                     {
-                        id: (Date.now() + 1).toString(),
+                        id: createMessageId('assistant'),
                         role: 'assistant',
                         content: data.response || '',
                         sources: data.sources ?? [],
@@ -201,7 +225,7 @@ export default function ChatPage() {
 
 
         // ---- Mặc định: streaming SSE `POST /chat/stream` (KB-4.4) ----
-        const assistantId = `assistant-${Date.now()}`;
+        const assistantId = createMessageId('assistant');
         const controller = new AbortController();
         abortRef.current = controller;
         let failed = false;
@@ -303,76 +327,62 @@ export default function ChatPage() {
      * Cần `messageId` vì mỗi câu trả lời có panel riêng; `nonce` để bấm lại cùng chip vẫn highlight lại.
      */
     const handleCitationClick = (messageId: string, citationId: string) => {
-        setCitationFocus((prev) => ({messageId, citationId, nonce: (prev?.nonce ?? 0) + 1}));
+        setCitationFocus((previous) => ({messageId, citationId, nonce: (previous?.nonce ?? 0) + 1}));
     };
 
-    const handleSelectSession = (sessionId: string) => {
-        // Lưu message hiện tại vào history trước khi chuyển
-        if (currentSessionId && messages.length > 0) {
-            setChatHistory((prev) => ({...prev, [currentSessionId]: messages}));
-        }
+    // ---- Session actions (KB-4.9: lưu trong `localStorage` qua `chat-store`) ----
 
-        setCurrentSessionId(sessionId);
-        setMessages(chatHistory[sessionId] ?? INITIAL_MESSAGES);
+    const handleSelectSession = (sessionId: string) => {
+        setChatStore((previous) => ({...previous, currentSessionId: sessionId}));
         setApiError(null);
         setRetryText(null);
+        setCitationFocus(null);
     };
 
     const handleNewChat = () => {
-        if (currentSessionId && messages.length > 0) {
-            setChatHistory((prev) => ({...prev, [currentSessionId]: messages}));
-        }
-
-        const newSession: ChatSession = {
-            id: `session_${Date.now()}`,
-            title: 'Cuộc trò chuyện mới',
-            createdAt: new Date(),
-            messageCount: 0,
-        };
-        setChatSessions((prev) => [newSession, ...prev]);
-        setCurrentSessionId(newSession.id);
-        // KB-4.1: chat mới ⇒ conversation_id mới (BE sẽ cấp id khác) — xoá id cũ khỏi localStorage
-        setConversationId(null);
+        const created = buildSession();
+        setChatStore((previous) => ({
+            ...previous,
+            currentSessionId: created.id,
+            sessions: [created, ...previous.sessions].slice(0, MAX_SESSIONS),
+        }));
         setApiError(null);
         setRetryText(null);
-        try {
-            window.localStorage.removeItem(CONVERSATION_STORAGE_KEY);
-        } catch {
-            // bỏ qua
-        }
-        setMessages(INITIAL_MESSAGES);
+        setCitationFocus(null);
+        setInput('');
     };
 
+    /** Xoá session; xoá session cuối cùng ⇒ tạo session trống mới (không để màn hình không có session). */
     const handleDeleteSession = (sessionId: string) => {
-        setChatSessions((prev) => prev.filter((session) => session.id !== sessionId));
-        setChatHistory((prev) => {
-            const next = {...prev};
-            delete next[sessionId];
-            return next;
-        });
-        if (currentSessionId === sessionId) {
-            const remaining = chatSessions.filter((session) => session.id !== sessionId);
-            if (remaining.length > 0) {
-                setCurrentSessionId(remaining[0].id);
-                setMessages(chatHistory[remaining[0].id] ?? INITIAL_MESSAGES);
-            } else {
-                handleNewChat();
+        setChatStore((previous) => {
+            const sessions = previous.sessions.filter((session) => session.id !== sessionId);
+            if (sessions.length === 0) {
+                const created = buildSession();
+                return {...previous, currentSessionId: created.id, sessions: [created]};
             }
-        }
+            const currentSessionId = sessions.some((session) => session.id === previous.currentSessionId)
+                ? previous.currentSessionId
+                : sessions[0].id;
+            return {...previous, currentSessionId, sessions};
+        });
     };
 
-    // Model thật BE đã dùng (metadata của câu trả lời gần nhất) — không phải select giả như bản cũ
+    // Model thật BE đã dùng (metadata của câu trả lời gần nhất) — không phải select giả
     const activeModel = [...messages]
         .reverse()
         .find((message) => message.role === 'assistant' && message.metadata?.model)?.metadata?.model;
 
     const sidebarProps = {
-        sessions: chatSessions,
-        currentSessionId,
+        sessions: store.sessions.map<ChatSession>((session) => ({
+            id: session.id,
+            title: session.title,
+            createdAt: new Date(session.createdAt),
+            messageCount: session.messageCount,
+        })),
+        currentSessionId: store.currentSessionId ?? undefined,
         onSelectSession: handleSelectSession,
         onNewChat: handleNewChat,
         onDeleteSession: handleDeleteSession,
-        onOpenDocuments: () => setShowDocumentsPanel(true),
     };
 
     return (
@@ -426,4 +436,3 @@ export default function ChatPage() {
         </div>
     );
 }
-

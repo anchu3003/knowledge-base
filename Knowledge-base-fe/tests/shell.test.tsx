@@ -19,7 +19,6 @@ function renderSidebar(overrides: Partial<React.ComponentProps<typeof SidebarCon
             onSelectSession={vi.fn()}
             onNewChat={vi.fn()}
             onDeleteSession={vi.fn()}
-            onOpenDocuments={vi.fn()}
             {...overrides}
         />,
     );
@@ -87,6 +86,12 @@ describe('SidebarContent (KB-4.8)', () => {
 
         await user.click(screen.getByRole('button', {name: 'Xoá cuộc trò chuyện Ôn phỏng vấn RAG'}));
         expect(onDeleteSession).toHaveBeenCalledWith('s1');
+    });
+
+    it('KHÔNG còn nút Kho tài liệu trong sidebar (KB-4.9: chỉ giữ ở header)', () => {
+        renderSidebar();
+        expect(screen.queryByRole('button', {name: 'Mở kho tài liệu'})).not.toBeInTheDocument();
+        expect(screen.queryByText('Kho tài liệu')).not.toBeInTheDocument();
     });
 
     it('rỗng thì hiện empty state + nút chat mới', async () => {
