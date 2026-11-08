@@ -1,62 +1,68 @@
 'use client';
 
-import {RoleBadge} from './role-badge';
-import {Button} from '@/components/ui/button';
-import {Database, LogOut} from 'lucide-react';
+import {useState} from 'react';
 import Link from 'next/link';
+import {Database, Menu} from 'lucide-react';
 
-export type UserRole = "admin" | "developer"
+import {ThemeToggle} from '@/components/theme-toggle';
+import {Button} from '@/components/ui/button';
+import {Sheet, SheetContent, SheetTitle, SheetTrigger} from '@/components/ui/sheet';
+import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
 
 interface AppHeaderProps {
-    /** Mở drawer "Kho tài liệu" (KB-4.5). Trước đây header gọi thẳng `fetch` tới BE — đã bỏ. */
-    onOpenDocuments?: () => void;
+    /** Mở drawer "Kho tài liệu" (KB-4.5) */
+    onOpenDocuments: () => void;
+    /**
+     * Nội dung sidebar cho drawer mobile — render-prop để header tự đóng drawer sau khi chọn
+     * (`close()`), còn state chat vẫn nằm ở `app/page.tsx`.
+     */
+    renderMobileSidebar?: (close: () => void) => React.ReactNode;
 }
 
-export function AppHeader({onOpenDocuments}: AppHeaderProps) {
-    const user: { name: string, role: UserRole } | null = {
-        name: 'An Chu',
-        role: 'developer'
-    }
+/**
+ * Header (KB-4.8) — bỏ các control giả của bản onboarding: user "An Chu", badge role, nút **Logout**
+ * (BE không có auth) và nút gradient tự phát. Chỉ còn: brand, drawer mobile, Kho tài liệu, theme toggle.
+ */
+export function AppHeader({onOpenDocuments, renderMobileSidebar}: AppHeaderProps) {
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     return (
-        <header className="border-b border-border bg-background sticky top-0 z-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between items-center h-16">
-                    {/* Logo */}
-                    <Link href="/" className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                            <span className="text-primary-foreground font-bold text-lg"> O </span>
-                        </div>
-                        <span className="font-bold text-lg hidden sm:inline"> Knowledge Navigator </span>
-                    </Link>
-
-                    {/* Documents & health panel (KB-4.5) */}
-                    <nav className="hidden md:flex items-left gap-1">
-                        <Button variant="ghost" size="sm" onClick={onOpenDocuments}
-                                className="gap-2" aria-label="Mở kho tài liệu">
-                            <Database className="h-4 w-4"/>
-                            <span className="text-sm font-medium">Kho tài liệu</span>
+        <header
+            className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur">
+            {renderMobileSidebar && (
+                <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                    <SheetTrigger asChild>
+                        <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Mở menu">
+                            <Menu className="size-4"/>
                         </Button>
-                    </nav>
+                    </SheetTrigger>
+                    <SheetContent side="left" className="w-72 p-0">
+                        <SheetTitle className="sr-only">Danh sách cuộc trò chuyện</SheetTitle>
+                        {renderMobileSidebar(() => setSidebarOpen(false))}
+                    </SheetContent>
+                </Sheet>
+            )}
 
-                    {/* User Info & Logout */}
-                    <div className="flex items-center gap-4">
-                        {user && (
-                            <>
-                                <div className="hidden sm:flex items-center gap-2 flex-row">
-                                    <div className="text-right flex-row flex gap-2">
-                                        <p className="text-sm font-medium text-foreground">{user.name}</p>
-                                        <RoleBadge role={user.role} size="sm"/>
-                                    </div>
-                                </div>
-                                <Button variant="ghost" size="sm" onClick={() => ""} className="gap-2">
-                                    <LogOut className="h-4 w-4"/>
-                                    <span className="hidden sm:inline">Logout</span>
-                                </Button>
-                            </>
-                        )}
-                    </div>
-                </div>
+            <Link href="/" className="flex min-w-0 items-center gap-2">
+                <span
+                    className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
+                    KB
+                </span>
+                <span className="truncate text-sm font-semibold text-foreground">Knowledge Base</span>
+            </Link>
+
+            <div className="ml-auto flex items-center gap-1">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="sm" onClick={onOpenDocuments} className="gap-2"
+                                aria-label="Mở kho tài liệu">
+                            <Database className="size-4"/>
+                            <span className="hidden sm:inline">Kho tài liệu</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Trạng thái index + tài liệu đã nạp</TooltipContent>
+                </Tooltip>
+                <ThemeToggle/>
             </div>
         </header>
     );
