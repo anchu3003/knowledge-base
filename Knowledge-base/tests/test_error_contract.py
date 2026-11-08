@@ -161,15 +161,17 @@ def test_stream_chat_yields_normalised_error_event():
     service = make_chat_service(_status_error(RateLimitError, 429))
 
     async def collect():
-        return [event async for event in service.stream_chat(message="hello")]
+        return [event async for event in service.stream_chat(message="hello", request_id="req-1")]
 
     events = asyncio.run(collect())
     error_events = [event for event in events if event.get("type") == "error"]
 
     assert len(error_events) == 1
-    assert error_events[0]["code"] == "provider_rate_limited"
-    assert PROVIDER_URL not in error_events[0]["message"]
-    assert "RateLimitError" not in error_events[0]["message"]
+    payload = error_events[0]["error"]  # KB-3.3: cùng schema envelope của /chat
+    assert payload["code"] == "provider_rate_limited"
+    assert payload["request_id"] == "req-1"
+    assert PROVIDER_URL not in payload["message"]
+    assert "RateLimitError" not in payload["message"]
 
 
 # ------------------------------

@@ -408,7 +408,8 @@ def test_stream_chat_retries_then_reports_error_event():
 
     assert llm.calls == 3
     assert len(error_events) == 1
-    assert error_events[0]["code"] == "provider_rate_limited"
+    assert error_events[0]["error"]["code"] == "provider_rate_limited"  # schema lồng (KB-3.3)
+    assert error_events[0]["error"]["request_id"] == "-"
 
 
 def test_retry_logs_contain_no_prompt_or_context(caplog):

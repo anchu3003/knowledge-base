@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     provider_retry_base_delay: float = Field(default=2.0, alias="PROVIDER_RETRY_BASE_DELAY")
     provider_max_concurrency: int = Field(default=1, alias="PROVIDER_MAX_CONCURRENCY")
 
+    # SSE (KB-3.3): gửi comment `: ping` nếu quá N giây không có token, để proxy/idle timeout
+    # không cắt kết nối khi LLM chậm (rerank ~8s + LLM ~2s). Client SSE bỏ qua comment an toàn.
+    sse_heartbeat_seconds: float = Field(default=15.0, alias="SSE_HEARTBEAT_SECONDS")
+
     # Prompt Settings
     # Path to the system prompt template file. The template may contain a `{context}` placeholder.
     system_prompt_path: str = Field(default="./prompts/system_prompt.txt", alias="SYSTEM_PROMPT_PATH")

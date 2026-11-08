@@ -94,6 +94,30 @@ From `app/main.py`:
 - `GET /` — Health/info (returns status, message, version)
 - `POST /chat` — Chat with the RAG system
 - `POST /chat/stream` — Chat with server-sent events (SSE) streaming
+
+### SSE contract (KB-3.3)
+
+`POST /chat/stream` stream về theo thứ tự **`start → token* → (end | error)`** — luôn có đúng **một** event
+kết thúc, không bao giờ cắt ngang.
+
+```text
+data: {"type": "start", "conversation_id": "...", "metadata": {...}}
+
+data: {"type": "token", "token": "Xin "}
+
+: ping
+
+data: {"type": "end", "answer": "...", "sources": [...], "metadata": {...}}
+```
+
+- Event `error` dùng **cùng schema** envelope lỗi của `/chat`:
+  `{"type": "error", "error": {"code", "message", "request_id"}}` (`request_id` = header `X-Request-ID`).
+- Lỗi xảy ra **sau** khi đã stream ⇒ HTTP vẫn `200` (header đã gửi), client dựa vào event `error`.
+- **Heartbeat**: comment `: ping` nếu quá `SSE_HEARTBEAT_SECONDS` (default 15) không có event — giữ kết nối
+  qua proxy/idle timeout khi LLM chậm. Client SSE bỏ qua comment an toàn.
+- Header chống buffer/tắt cache: `Cache-Control: no-cache`, `X-Accel-Buffering: no`, `Connection: keep-alive`.
+- **Client disconnect** (đóng tab, `curl` timeout): generator dừng ngay, log mức `info` (không stack). Phần đã
+  trả lời **được giữ** trong history nếu đã phát ≥1 token, kèm `interrupted: true`; chưa có token thì bỏ.
 - `POST /documents/refresh` — Clear and re-load from `DOCUMENTS_FOLDER`
 - `GET /documents/folder-info` — Inspect the docs folder and supported file counts
 - `GET /documents/status` — Status of the document store
@@ -193,6 +217,10 @@ Defined in `app/core/config.py`. All can be provided via `.env`.
     header `Retry-After` của provider (giây **hoặc** ms) được ưu tiên, cap ở `PROVIDER_TIMEOUT_SECONDS`.
   - `PROVIDER_MAX_CONCURRENCY` (default: `1`) — số call provider đồng thời; `1` = **serialize** để 2 request
     cùng lúc không đẩy TPM vượt hạn mức (query rewrite cũng đi qua cổng này, nhưng **không** retry).
+
+- SSE (KB-3.3)
+  - `SSE_HEARTBEAT_SECONDS` (default: `15`) — gửi comment `: ping` nếu quá N giây không có event, để
+    proxy/idle timeout không cắt stream khi LLM chậm.
 
 - Prompt Files
   - `SYSTEM_PROMPT_PATH` (default: `./prompts/system_prompt.txt`)
