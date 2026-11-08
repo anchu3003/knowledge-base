@@ -105,6 +105,18 @@ class DocumentStoreError(AppError):
     public_message = "The document store operation failed."
 
 
+class DocumentsFolderEmptyError(AppError):
+    """Folder tài liệu không tồn tại hoặc không có file hỗ trợ → 409.
+
+    KB-4.10: `POST /documents/refresh` clear index rồi auto-load; nếu folder rỗng (vd `.dockerignore`
+    loại folder khỏi image) thì sẽ **xoá sạch index mà không index lại được** ⇒ chặn trước khi clear.
+    """
+
+    code = "documents_folder_empty"
+    http_status = 409
+    public_message = "Documents folder is missing or has no supported files."
+
+
 class NotFoundError(AppError):
     """Không tìm thấy tài nguyên → 404."""
 
