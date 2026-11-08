@@ -68,6 +68,11 @@ const CODE_VIEWS: Record<string, CodeView> = {
         hint: 'Thử lại; nếu vẫn lỗi, xem log backend theo request_id bên dưới.',
         retryable: false,
     },
+    documents_folder_empty: {
+        message: 'Folder tài liệu không tồn tại hoặc không có file hỗ trợ.',
+        hint: 'Refresh đã bị chặn để không xoá index hiện tại. Kiểm tra DOCUMENTS_FOLDER của backend (trong Docker: mount ./Interview).',
+        retryable: false,
+    },
     validation_error: {
         message: 'Yêu cầu chưa hợp lệ.',
         hint: 'Kiểm tra lại nội dung câu hỏi và các tham số (max tokens, temperature).',
