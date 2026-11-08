@@ -276,6 +276,7 @@ Kết quả in ra bảng markdown + snapshot JSON ở `eval/runs/`.
 | `hit_at_k` | tỉ lệ câu có >= 1 `expected_file` nằm trong top-k | retrieval |
 | `mrr` | mean reciprocal rank của file kỳ vọng đầu tiên | retrieval |
 | `dup_ratio` | tỉ lệ cặp chunk trong top-k gần trùng (Jaccard shingle 3-gram >= 0.8) | retrieval |
+| `precision_at_k` | tỉ lệ hit trong top-k trỏ đúng file kỳ vọng (precision của ngữ cảnh) | retrieval |
 | `distinct_file_ratio` | tỉ lệ file khác nhau trong top-k (1.0 = không lặp file; 0.2 = 5 hit cùng 1 file) | retrieval |
 | `latency_p50` | trung vị thời gian 1 query (giây) | cả hai |
 | `citation_presence` | tỉ lệ câu trả lời có nhãn `[S1]`, `[S2]`, … (bất kỳ đâu) | full |

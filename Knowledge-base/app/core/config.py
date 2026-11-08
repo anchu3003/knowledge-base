@@ -46,7 +46,9 @@ class Settings(BaseSettings):
     auto_load_on_startup: bool = Field(default=True, alias="AUTO_LOAD_ON_STARTUP")
 
     # RAG Settings
-    retrieval_k: int = Field(default=5, alias="RETRIEVAL_K")
+    # RETRIEVAL_K=3: chốt bằng số đo KB-2.5 (grid 10 cấu hình) — precision@k 0.533 vs 0.347 ở k=5,
+    # `MRR` 1.0 giữ nguyên, `distinct_file_ratio` 0.756 (tốt nhất trong nhóm rerank on).
+    retrieval_k: int = Field(default=3, alias="RETRIEVAL_K")
     # Ngưỡng cosine tối thiểu cho **dense candidates** (0 = tắt). Chỉ áp cho dense vì score hybrid
     # đã min-max normalize còn rerank là logits cross-encoder (khác scale, không so được với cosine).
     # Đo/chốt giá trị thật ở KB-2.5 — đừng đặt số khi chưa đo.
