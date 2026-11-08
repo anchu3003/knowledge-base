@@ -30,28 +30,35 @@ from app.core.middleware import RequestIDMiddleware, get_request_id
 from app.core.sse import SSE_HEADERS, sse_event_stream
 from app.services.document_service import DocumentService
 from app.services.chat_service import ChatService
+from app.services.health_service import HealthService
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
     DocumentUploadResponse,
-    HealthResponse
+    HealthResponse,
+    HealthStatusResponse,
+    ReadinessResponse,
 )
 
 # Global service instances
 document_service: Optional[DocumentService] = None
 chat_service: Optional[ChatService] = None
+health_service: Optional[HealthService] = None
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Initialize services on startup and cleanup on shutdown"""
-    global document_service, chat_service
+    global document_service, chat_service, health_service
 
     document_service = None
     chat_service = None
+    health_service = None
 
     try:
         setting = get_settings()
+        # `uptime_seconds` của /health tính từ đây (KB-3.4)
+        health_service = HealthService(setting)
         # Initialize services
         try:
             print("Initializing document service...")
@@ -214,6 +221,18 @@ def get_chat_service() -> ChatService:
     return chat_service
 
 
+def get_health_service() -> HealthService:
+    """Dependency to get health service.
+
+    Lazy (tạo từ settings nếu lifespan chưa chạy) ⇒ liveness probe vẫn trả lời được
+    kể cả khi service nặng chưa init xong (đúng vai trò liveness).
+    """
+    global health_service
+    if health_service is None:
+        health_service = HealthService(get_settings())
+    return health_service
+
+
 @app.get("/", response_model=HealthResponse)
 async def root():
     """Root endpoint with API information"""
@@ -222,6 +241,41 @@ async def root():
         message="RAG Chatbot API is running",
         version="1.0.0"
     )
+
+
+@app.get("/health", response_model=HealthStatusResponse)
+async def health(service: HealthService = Depends(get_health_service)):
+    """Liveness probe (KB-3.4): process còn sống ⇒ **luôn 200**, không chạm Chroma/provider.
+
+    Dùng cho Docker `HEALTHCHECK` / systemd / k8s livenessProbe.
+    """
+    return service.liveness()
+
+
+@app.get("/ready", response_model=ReadinessResponse)
+async def ready(
+        deep: bool = False,
+        service: HealthService = Depends(get_health_service),
+):
+    """Readiness probe (KB-3.4): app có đủ điều kiện trả lời không?
+
+    - `ok` (200): provider config + prompt file + collection đều ổn;
+    - `degraded` (200): collection rỗng/lỗi — vẫn nhận request (trả lời "không có trong knowledge base");
+    - `error` (503): thiếu cấu hình provider / thiếu prompt file (`deep` mà provider không trả lời cũng 503).
+
+    `deep=true` gọi provider **1 request `max_tokens=1`** (tốn quota) ⇒ **mặc định tắt**, chỉ dùng tay;
+    **không** đưa vào `HEALTHCHECK` của Docker.
+    """
+    provider_probe = None
+    if deep and chat_service is not None:
+        provider_probe = chat_service.provider_probe
+
+    payload, http_status = await service.readiness(
+        document_service=document_service,
+        provider_probe=provider_probe,
+        deep=deep,
+    )
+    return JSONResponse(status_code=http_status, content=payload)
 
 
 @app.post("/documents/refresh", response_model=DocumentUploadResponse)

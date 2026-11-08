@@ -14,6 +14,28 @@ class HealthResponse(BaseModel):
 
 
 # ------------------------------
+# Liveness / readiness (KB-3.4)
+# ------------------------------
+class HealthStatusResponse(BaseModel):
+    """Liveness (`GET /health`) — không phụ thuộc Chroma/provider."""
+    status: str = Field(..., description="Luôn 'ok' khi process còn sống")
+    version: str
+    uptime_seconds: float = Field(..., description="Giây kể từ lúc lifespan start")
+
+
+class ReadinessCheck(BaseModel):
+    """Một check của readiness: `ok` + mô tả ngắn (không chứa secret)."""
+    ok: bool
+    detail: str
+
+
+class ReadinessResponse(BaseModel):
+    """Readiness (`GET /ready`): `ok` (200) · `degraded` (200, thiếu tài liệu) · `error` (503)."""
+    status: str = Field(..., description="ok | degraded | error")
+    checks: Dict[str, ReadinessCheck]
+
+
+# ------------------------------
 # Document Upload
 # ------------------------------
 class DocumentUploadResponse(BaseModel):

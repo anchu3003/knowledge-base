@@ -57,5 +57,11 @@ USER appuser
 # Expose FastAPI port
 EXPOSE 8000
 
+# Liveness probe (KB-3.4) — chỉ `/health`: rẻ, không chạm Chroma/provider.
+# KHÔNG dùng `/ready?deep=true` trong healthcheck (mỗi 30s tốn 1 request quota).
+# `--start-period` dài vì lần đầu phải tải embedding model (~30–60s trên CPU).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
+
 # Default command: production-ready Uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
