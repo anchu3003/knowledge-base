@@ -98,7 +98,9 @@ export function SourcesPanel({
     const retrieved = typeof metadata?.retrieved_documents === 'number' ? metadata.retrieved_documents : null;
 
     return (
-        <section className="mt-4 space-y-2" aria-label="Nguồn tham khảo">
+        // KB-4.9: `w-full min-w-0` — nếu để auto-width trong cột `items-start`, panel lấy max-content
+        // (phụ thuộc font/độ dài path) và thò ra ngoài bubble → trông lệch và tràn ngang.
+        <section className="mt-1 w-full min-w-0 space-y-2" aria-label="Nguồn tham khảo">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400">
                 <FileText className="h-4 w-4"/>
                 <span>Nguồn ({sources.length})</span>
@@ -157,7 +159,7 @@ function SourceCard({source, index, expanded, highlighted, onToggle, registerRef
             ref={registerRef}
             data-testid={`source-card-${label}`}
             data-citation-id={label}
-            className={`rounded-xl border p-3 shadow-sm transition-all ${
+            className={`w-full min-w-0 overflow-hidden rounded-xl border p-3 shadow-sm transition-all ${
                 highlighted
                     ? 'border-violet-400 bg-violet-50 ring-2 ring-violet-300 dark:border-violet-500 dark:bg-violet-900/30 dark:ring-violet-700'
                     : 'border-slate-200 bg-white hover:shadow-md dark:border-slate-700 dark:bg-slate-800'
@@ -189,13 +191,13 @@ function SourceCard({source, index, expanded, highlighted, onToggle, registerRef
                         )}
                     </div>
 
-                    <p className="mb-2 truncate text-xs text-slate-500 dark:text-slate-400"
+                    <p className="mb-2 truncate text-xs text-slate-500 dark:text-slate-400 [overflow-wrap:anywhere]"
                        title={sourceSubtitle(source)}>
                         {sourceSubtitle(source)}
                     </p>
 
                     {text && (
-                        <p className="whitespace-pre-wrap break-words text-xs text-slate-600 dark:text-slate-300">
+                        <p className="text-xs break-words whitespace-pre-wrap text-slate-600 [overflow-wrap:anywhere] dark:text-slate-300">
                             {text}
                         </p>
                     )}

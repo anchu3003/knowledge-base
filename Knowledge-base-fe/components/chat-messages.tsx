@@ -92,7 +92,7 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
                             </AvatarFallback>
                         </Avatar>
 
-                        <div className={`flex min-w-0 flex-1 flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
+                        <div className={`flex min-w-0 max-w-full flex-1 flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
                             <div
                                 className={`w-fit max-w-[88%] rounded-2xl border px-3.5 py-2.5 shadow-xs ${
                                     isUser

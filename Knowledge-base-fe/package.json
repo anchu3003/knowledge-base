@@ -10,8 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify:ui": "node tools/ui-verify.mjs",
-    "verify:ui:wsl": "bash tools/ui-verify.sh"
+    "test:e2e": "playwright test",
+    "test:e2e:prod": "APP_URL=http://localhost:3010 playwright test",
+    "test:all": "npm run test && npm run test:e2e"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -61,6 +62,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/postcss": "^4.1.9",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
