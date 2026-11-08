@@ -118,6 +118,42 @@ data: {"type": "end", "answer": "...", "sources": [...], "metadata": {...}}
 - Header chống buffer/tắt cache: `Cache-Control: no-cache`, `X-Accel-Buffering: no`, `Connection: keep-alive`.
 - **Client disconnect** (đóng tab, `curl` timeout): generator dừng ngay, log mức `info` (không stack). Phần đã
   trả lời **được giữ** trong history nếu đã phát ≥1 token, kèm `interrupted: true`; chưa có token thì bỏ.
+
+### Health & readiness (KB-3.4)
+
+| Endpoint | Vai trò | Chi phí |
+|---|---|---|
+| `GET /health` | **liveness** — process còn sống ⇒ luôn `200` | rẻ: không chạm Chroma/provider |
+| `GET /ready` | **readiness** — đủ điều kiện trả lời? | rẻ: 3 check `provider_config` / `prompt_file` / `collection` |
+| `GET /ready?deep=true` | thêm check **gọi provider thật** (`max_tokens=1`) | tốn 1 request ⇒ mặc định **tắt**, chỉ dùng tay |
+
+```json
+GET /health  →  {"status": "ok", "version": "1.0.0", "uptime_seconds": 12.34}
+
+GET /ready   →  200
+{
+  "status": "ok",
+  "checks": {
+    "provider_config": {"ok": true,  "detail": "model=openai/gpt-oss-120b"},
+    "prompt_file":     {"ok": true,  "detail": "prompt file: system_prompt.txt"},
+    "collection":      {"ok": true,  "detail": "601 chunks indexed"}
+  }
+}
+```
+
+- `ok` (200) — dùng được đầy đủ.
+- `degraded` (200) — thiếu tài liệu (collection rỗng/lỗi): vẫn chat được, trả lời "không có trong knowledge base".
+- `error` (**503**) — thiếu cấu hình provider (`OPENAI_API_KEY`/`OPENAI_MODEL`/`OPENAI_BASE_URL`) hoặc thiếu
+  file prompt; hoặc `deep=true` mà provider không trả lời.
+- Response của `/ready` dùng body riêng (`status` + `checks`), **không** dùng envelope `{"error": ...}` của API
+  — vì đây là probe cho orchestrator, không phải response nghiệp vụ. `checks.*.detail` không chứa secret/`str(e)`.
+- Docker image có `HEALTHCHECK` trỏ `/health` (`--start-period=180s` vì lần đầu tải embedding model).
+
+```bash
+curl -s localhost:8000/health
+curl -s localhost:8000/ready
+curl -s "localhost:8000/ready?deep=true"   # kiểm key/provider thật (tốn 1 request)
+```
 - `POST /documents/refresh` — Clear and re-load from `DOCUMENTS_FOLDER`
 - `GET /documents/folder-info` — Inspect the docs folder and supported file counts
 - `GET /documents/status` — Status of the document store

@@ -398,6 +398,20 @@ class ChatService:
                 "error": {"code": mapped.code, "message": mapped.public_message, "request_id": request_id},
             }
 
+    async def provider_probe(self) -> None:
+        """Gọi provider **1 request rẻ nhất** (`max_tokens=1`) — dùng cho `/ready?deep=true` (KB-3.4).
+
+        - `retry=False`: probe phải fail-fast, retry chỉ làm probe chậm;
+        - vẫn đi qua `ProviderThrottle` (semaphore) để không vượt TPM;
+        - raise `AppError` (taxonomy KB-3.1) nếu provider không trả lời.
+        """
+        probe_llm = self.llm.bind(max_tokens=1) if hasattr(self.llm, "bind") else self.llm
+        await self.provider.run(
+            lambda: probe_llm.ainvoke([HumanMessage(content="ping")]),
+            op="health_probe",
+            retry=False,
+        )
+
     async def _rewrite_query(self, original_query: str) -> str:
         """Use the LLM to rewrite the user query to improve retrieval.
 
