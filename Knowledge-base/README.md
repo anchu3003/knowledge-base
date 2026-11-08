@@ -363,6 +363,26 @@ knowledge-base/
   ```
 - Retrieval/answer quality is measured by the eval harness (see below), not by unit tests.
 
+### Test API (KB-3.5 — trả TD-4)
+
+Test tầng HTTP dùng `TestClient` + **fake service** qua `app.dependency_overrides`: không load model,
+không mở ChromaDB, không gọi mạng, **không chạy lifespan** ⇒ chạy offline, rất nhanh.
+
+```bash
+cd Knowledge-base
+.venv/bin/python -m pytest tests/test_api_endpoints.py tests/test_api_errors.py tests/test_api_stream.py -q
+# 28 passed in 0.13s
+```
+
+| File | Bảo vệ contract |
+|---|---|
+| `tests/conftest.py` | fixture `api_client` (override `get_chat_service` / `get_document_service`), fake service, `health_service_factory` |
+| `tests/test_api_endpoints.py` | happy path: `/`, `/health`, `/ready` (ok / degraded / error), `/chat`, `/documents/status\|refresh\|clear\|folder-info` |
+| `tests/test_api_errors.py` | envelope `{"error": {code, message, request_id}}`: 422 / 404 / 405 / 429 / 502 / 503 / 504 / 500, echo `X-Request-ID`, **không lộ** `str(e)` / URL provider / traceback |
+| `tests/test_api_stream.py` | SSE: `start → token* → end`, event `error` + `request_id`, header chống buffer |
+
+Toàn bộ suite: `.venv/bin/python -m pytest -q` (**164 passed**, ~1s).
+
 ## Đo chất lượng RAG (eval harness)
 
 Bộ đo chất lượng retrieval + grounding, dùng làm baseline cho Phase 2 (`Backlog.md` KB-2.1).
