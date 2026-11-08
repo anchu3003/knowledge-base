@@ -28,19 +28,46 @@ This README consolidates the current, working setup based on the repository sour
 
 ## Quickstart (Docker Compose)
 
+Sau **KB-4.7**, `docker compose up` chạy **2 service**: `chatbot-api` (BE :8000) + `chatbot-ui` (FE :3000).
+
 1) Copy `.env.example` to `.env` and update values.
 
-2) Start the API:
+2) (Tuỳ chọn) đổi URL mà **browser** dùng để gọi BE — `NEXT_PUBLIC_*` nhúng vào bundle **lúc build**:
+
+```bash
+# mặc định http://localhost:8000 (browser trên máy host gọi BE)
+export NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000
+# tắt streaming SSE khi build FE
+export NEXT_PUBLIC_STREAMING=false
+```
+
+3) Start cả BE + FE:
 
 ```bash
 docker compose up -d --build
+docker compose ps            # cả 2 service phải "healthy"
 ```
 
-3) Open API docs:
+4) Mở:
 
-- http://localhost:8000/docs
+- FE: http://localhost:3000 (panel **Kho tài liệu** ở header để xem index/readiness)
+- API docs: http://localhost:8000/docs
 
-Default container name: `rag-chatbot-api` (from `docker-compose.yml`).
+Ghi chú vận hành:
+
+- `chatbot-ui` **không** mount source nữa (image là thứ sẽ deploy); FE chờ BE `healthy` mới start
+  (`depends_on: condition: service_healthy`).
+- `chatbot-api` chạy bằng **UID/GID của bạn** (`USER_ID`/`GROUP_ID`, mặc định `1000`) vì `./chroma_db` là bind mount
+  của user trên host — nếu image chạy uid 10001 (mặc định trong Dockerfile) thì ChromaDB báo
+  `attempt to write a readonly database`.
+- Model embedding/reranker nằm trong **named volume** `hf-cache` (~3.3GB). Lần `up` đầu tiên phải tải model
+  ⇒ `start_period` của healthcheck là **600s**. Muốn nhanh: copy sẵn cache từ máy:
+  ```bash
+  docker volume create knowledge-base_hf-cache
+  docker run --rm -v knowledge-base_hf-cache:/dst -v ~/.cache/huggingface:/src:ro busybox \
+    sh -c 'cp -a /src/. /dst/'
+  ```
+- Đổi code BE/FE ⇒ `docker compose up -d --build` lại (không còn hot-reload qua mount).
 
 ## Local Setup (without Docker)
 
@@ -320,14 +347,16 @@ Notes:
 
 - Uvicorn (local): `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
 - Dockerfile entrypoint: Uvicorn command above
-- Docker Compose service: `rag-chatbot-api`
-  - Ports: `8000:8000`
-  - Volumes: `.:/app`, `./chroma_db:/app/chroma_db`
+- Docker Compose services (KB-4.7): `chatbot-api` (BE, `8000:8000`) + `chatbot-ui` (FE, `3000:3000`)
+  - BE volumes: `./chroma_db:/app/chroma_db`, `hf-cache:/hf-cache` (named volume, chứa model HF)
+  - FE: build từ `../Knowledge-base-fe` với `build.args` (`NEXT_PUBLIC_API_PROXY_URL`, `NEXT_PUBLIC_STREAMING`),
+    **không** mount source, `depends_on: chatbot-api (service_healthy)`
 
 Common commands:
-- Build and run: `docker compose up -d --build`
-- Stop: `docker compose down`
-- Logs: `docker compose logs -f rag-chatbot-api`
+- Build and run: `docker compose up -d --build` (lần đầu tải model ~3.3GB ⇒ FE chỉ start khi BE healthy)
+- Trạng thái/health: `docker compose ps`
+- Stop: `docker compose down` (thêm `-v` nếu muốn xoá luôn volume `hf-cache`)
+- Logs: `docker compose logs -f chatbot-api` hoặc `chatbot-ui`
 
 ## Project Structure
 
