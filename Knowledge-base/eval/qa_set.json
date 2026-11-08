@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "created": "2026-11-07",
+  "notes": "Golden set cho eval retrieval + grounding (KB-2.1). expected_files tính từ DOCUMENTS_FOLDER (Interview/). Keyword dùng để đo answer_keyword_hit ở --mode full; không phải điều kiện pass/fail.",
+  "items": [
+    {
+      "id": "q01",
+      "question": "Saga pattern giải quyết vấn đề gì trong microservices và tại sao không dùng 2PC?",
+      "expected_files": ["Backend&Devops/Design patterns & Architecture/Saga Pattern.md"],
+      "expected_keywords": ["saga", "compensat"]
+    },
+    {
+      "id": "q02",
+      "question": "Chuẩn hoá database (normalization) nhằm mục đích gì?",
+      "expected_files": ["Backend&Devops/DBMS & SQL/Data Normalization.md"],
+      "expected_keywords": ["redundan", "anomal"]
+    },
+    {
+      "id": "q03",
+      "question": "Khi nào nên dùng B-Tree index và khi nào nên dùng Hash index?",
+      "expected_files": ["Backend&Devops/DBMS & SQL/Index.md"],
+      "expected_keywords": ["range", "equality"]
+    },
+    {
+      "id": "q04",
+      "question": "API Gateway có những trách nhiệm gì và Zuul khác Spring Cloud Gateway ở điểm nào?",
+      "expected_files": ["Backend&Devops/Microservices/API Gateway.md"],
+      "expected_keywords": ["gateway", "zuul"]
+    },
+    {
+      "id": "q05",
+      "question": "Client-side load balancing với Netflix Ribbon có đặc điểm và tính năng gì?",
+      "expected_files": ["Backend&Devops/Microservices/Client Side Load balancer.md"],
+      "expected_keywords": ["ribbon"]
+    },
+    {
+      "id": "q06",
+      "question": "Container trong Docker khác image như thế nào?",
+      "expected_files": ["Backend&Devops/Tools/Docker.md"],
+      "expected_keywords": ["container", "image"]
+    },
+    {
+      "id": "q07",
+      "question": "Optimistic locking trong JPA được implement như thế nào?",
+      "expected_files": ["Backend&Devops/Java/ORM&JPA/JPA & Hibernate.md"],
+      "expected_keywords": ["version"]
+    },
+    {
+      "id": "q08",
+      "question": "Có mấy cách implement Dependency Injection trong Spring Framework?",
+      "expected_files": ["Interview Q&A/Spring Boot Q&A.md"],
+      "expected_keywords": ["dependency injection"]
+    },
+    {
+      "id": "q09",
+      "question": "Spring Boot là gì và lợi ích chính so với cấu hình Spring truyền thống?",
+      "expected_files": ["Backend&Devops/Java/Spring Projects/Spring Boot.md"],
+      "expected_keywords": ["spring boot"]
+    },
+    {
+      "id": "q10",
+      "question": "Trong React Router v6, Link khác thẻ a ở điểm nào?",
+      "expected_files": ["Frontend/ReactJS/React Router version 6.md"],
+      "expected_keywords": ["link"]
+    },
+    {
+      "id": "q11",
+      "question": "Làm sao căn giữa một element bằng CSS?",
+      "expected_files": ["Frontend/CSS/How to Center an Element with CSS.md"],
+      "expected_keywords": ["position"]
+    },
+    {
+      "id": "q12",
+      "question": "Vuex trong VueJS dùng để làm gì?",
+      "expected_files": ["Frontend/VueJs/Vuex- State management.md"],
+      "expected_keywords": ["vuex", "store"]
+    },
+    {
+      "id": "q13",
+      "question": "Quy trình optimize một câu query SQL chậm gồm những bước nào?",
+      "expected_files": ["Backend&Devops/DBMS & SQL/Optimize Query.md"],
+      "expected_keywords": ["execution plan"]
+    },
+    {
+      "id": "q14",
+      "question": "Các lệnh git CLI cơ bản để commit và push code là gì?",
+      "expected_files": ["Backend&Devops/Tools/Git.md"],
+      "expected_keywords": ["git commit", "git push"]
+    },
+    {
+      "id": "q15",
+      "question": "Câu \"That's sound good\" nghĩa là gì trong tiếng Việt?",
+      "expected_files": ["English/Pharses.md"],
+      "expected_keywords": ["hay", "tất nhiên"]
+    }
+  ]
+}

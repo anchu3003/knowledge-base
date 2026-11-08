@@ -241,7 +241,47 @@ knowledge-base/
 
 ## Testing
 
-- There are currently no automated tests in this repository. TODO: Add unit and integration tests for services and API endpoints.
+- Unit/integration tests live in `tests/` (PII redaction, ingest redaction, embedding config). Run:
+  ```bash
+  .venv/bin/python -m pytest -q
+  ```
+- Retrieval/answer quality is measured by the eval harness (see below), not by unit tests.
+
+## Đo chất lượng RAG (eval harness)
+
+Bộ đo chất lượng retrieval + grounding, dùng làm baseline cho Phase 2 (`Backlog.md` KB-2.1).
+Chạy từ thư mục `Knowledge-base/`:
+
+```bash
+# 1) (Tuỳ chọn) index lại DOCUMENTS_FOLDER — cần collection trước khi đo
+.venv/bin/python eval/run_eval.py --build-index --limit 1
+
+# 2) Đo retrieval — KHÔNG gọi LLM, không tốn quota
+.venv/bin/python eval/run_eval.py --mode retrieval --tag baseline
+.venv/bin/python eval/run_eval.py --mode retrieval --rerank off   # bỏ qua reranker (nhanh, không tải model 2.3GB)
+
+# 3) Đo câu trả lời thật qua Groq (/chat) — tốn 1 request/câu
+.venv/bin/python eval/run_eval.py --mode full --tag baseline
+```
+
+Bộ câu hỏi vàng: `eval/qa_set.json` (`question`, `expected_files`, `expected_keywords`).
+Kết quả in ra bảng markdown + snapshot JSON ở `eval/runs/`.
+
+| Metric | Ý nghĩa | Mode |
+|---|---|---|
+| `hit_at_k` | tỉ lệ câu có >= 1 `expected_file` nằm trong top-k | retrieval |
+| `mrr` | mean reciprocal rank của file kỳ vọng đầu tiên | retrieval |
+| `dup_ratio` | tỉ lệ cặp chunk trong top-k gần trùng (Jaccard shingle 3-gram >= 0.8) | retrieval |
+| `distinct_file_ratio` | tỉ lệ file khác nhau trong top-k (1.0 = không lặp file; 0.2 = 5 hit cùng 1 file) | retrieval |
+| `latency_p50` | trung vị thời gian 1 query (giây) | cả hai |
+| `citation_presence` | tỉ lệ câu trả lời có nhãn `[S1]`, `[S2]`, … | full |
+| `answer_keyword_hit` | tỉ lệ câu trả lời chứa keyword kỳ vọng | full |
+
+Flag hữu ích: `--limit N` (chạy thử N câu), `--k N` (override `RETRIEVAL_K`),
+`--rerank {env,on,off}` (override `ENABLE_RERANK`), `--tag` (nhãn snapshot).
+
+> Lưu ý PII: `--mode full` gửi câu hỏi + context lên LLM provider. Context đi qua `PIIRedactor`
+> trước khi ra ngoài, nhưng tài liệu vẫn là note cá nhân → cân nhắc trước khi chạy.
 
 ## Troubleshooting
 
