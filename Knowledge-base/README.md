@@ -101,6 +101,43 @@ From `app/main.py`:
 
 OpenAPI docs: http://localhost:8000/docs
 
+### Error contract (KB-3.1)
+
+Mọi response lỗi dùng **một** envelope duy nhất (`app/core/errors.py`):
+
+```json
+{
+  "error": {
+    "code": "provider_rate_limited",
+    "message": "The language model provider rate limit was reached. Please retry later.",
+    "request_id": "19e63b57-00f9-4def-ac48-3f357ae0e79a"
+  }
+}
+```
+
+- `code` là **hằng số** → client switch theo `code`, đừng parse `message`.
+- `message` là message **chung**, không chứa chi tiết nội bộ. Chi tiết kỹ thuật (`str(e)`, host
+  provider, path, traceback) **chỉ** nằm trong log — tra bằng `request_id`.
+- `request_id` = header `X-Request-ID`. Client được gửi `X-Request-ID` của mình (chỉ `[A-Za-z0-9._-]`,
+  ≤ 64 ký tự, id không hợp lệ sẽ bị thay bằng uuid4) và server trả lại đúng id đó trong header + body lỗi.
+
+| code | HTTP | Khi nào |
+|---|---|---|
+| `validation_error` | 422 | body sai; kèm `error.details[]` = `loc`/`msg`/`type` (**không** echo giá trị client gửi) |
+| `not_found` | 404 | route/tài nguyên không tồn tại |
+| `method_not_allowed` | 405 | sai HTTP method |
+| `bad_request` / `forbidden` / `payload_too_large` | 400 / 403 / 413 | lỗi request phía framework |
+| `provider_auth_failed` | 502 | provider từ chối credential |
+| `provider_rate_limited` | 429 | provider hết quota/rate limit (Groq TPM) |
+| `provider_unavailable` | 503 | không gọi được provider (mạng/hạ tầng) |
+| `provider_timeout` | 504 | provider không trả lời kịp |
+| `service_unavailable` | 503 | service (chat/document) chưa khởi tạo xong |
+| `document_store_error` | 500 | lỗi thao tác trên vector store/tài liệu |
+| `internal_error` | 500 | lỗi không phân loại (stack chỉ ở log) |
+
+`POST /chat/stream` (SSE) giữ event `{"type": "error", "code", "message"}` với cùng ngữ nghĩa
+`code`/`message`; event `error` đầy đủ (kèm `request_id`) nằm ở KB-3.3.
+
 ## Environment Variables
 
 Defined in `app/core/config.py`. All can be provided via `.env`.
@@ -245,7 +282,8 @@ knowledge-base/
 
 ## Testing
 
-- Unit/integration tests live in `tests/` (PII redaction, ingest redaction, embedding config). Run:
+- Unit/integration tests live in `tests/` (PII redaction, ingest redaction, embedding config,
+  error contract + `X-Request-ID` trong `tests/test_error_contract.py`). Run:
   ```bash
   .venv/bin/python -m pytest -q
   ```

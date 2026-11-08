@@ -66,3 +66,23 @@ class ConversationMessage(BaseModel):
     content: str = Field(..., description="Message content")
     timestamp: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+# ------------------------------
+# Error contract (KB-3.1)
+# ------------------------------
+
+class ErrorDetail(BaseModel):
+    """Chi tiết một lỗi: `code` hằng số + message chung + `request_id` để tra log."""
+    code: str = Field(..., description="Stable snake_case error code, e.g. provider_rate_limited")
+    message: str = Field(..., description="Safe, generic message (no internal details)")
+    request_id: str = Field(..., description="Request id, matches the X-Request-ID response header")
+    details: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Optional field-level details (only for validation errors)"
+    )
+
+
+class ErrorResponse(BaseModel):
+    """Envelope lỗi duy nhất của API: `{"error": {code, message, request_id}}`."""
+    error: ErrorDetail
+
