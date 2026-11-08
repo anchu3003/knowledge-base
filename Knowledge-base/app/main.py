@@ -22,6 +22,7 @@ from app.core.config import get_settings
 from app.core.errors import (
     AppError,
     DocumentStoreError,
+    DocumentsFolderEmptyError,
     ServiceUnavailableError,
     error_body,
     http_status_error,
@@ -76,18 +77,34 @@ async def lifespan(application: FastAPI):
             print(f"Failed to initialize chat service: {str(e)}")
             raise
 
-        # Auto-load documents if enabled
+        # Auto-load documents if enabled (KB-4.10)
         if setting.auto_load_on_startup:
-            print("Auto-loading documents from 'documents' folder...")
+            documents_folder = Path(setting.documents_folder)
+            # Trước đây startup luôn re-index toàn bộ folder ⇒ mount folder vào container làm mỗi lần start
+            # mất nhiều phút (embedding lại 601 chunk đã có). Chỉ auto-load khi index còn rỗng;
+            # re-index chủ động thì dùng `POST /documents/refresh`.
+            existing_chunks = 0
             try:
-                result = await document_service.auto_load_documents()
-                if result["processed_files"] > 0:
-                    print(f"Auto-loaded {result['processed_files']} files, {result['total_chunks']} chunks")
-                else:
-                    print("No documents found to auto-load")
+                existing_chunks = int(document_service.collection.count())
             except Exception as e:
-                print(f"Warning: Error auto-loading documents: {str(e)}")
-                print("Continuing startup without auto-loaded documents...")
+                print(f"Warning: cannot read collection count: {str(e)}")
+
+            if existing_chunks > 0:
+                print(
+                    f"Skip auto-load: index đã có {existing_chunks} chunk "
+                    f"(dùng POST /documents/refresh nếu muốn re-index từ {documents_folder})"
+                )
+            else:
+                print(f"Auto-loading documents from '{documents_folder}' folder...")
+                try:
+                    result = await document_service.auto_load_documents()
+                    if result["processed_files"] > 0:
+                        print(f"Auto-loaded {result['processed_files']} files, {result['total_chunks']} chunks")
+                    else:
+                        print("No documents found to auto-load")
+                except Exception as e:
+                    print(f"Warning: Error auto-loading documents: {str(e)}")
+                    print("Continuing startup without auto-loaded documents...")
 
         print("RAG Chatbot API initialized successfully")
     except Exception as e:
@@ -276,6 +293,14 @@ async def ready(
     return JSONResponse(status_code=http_status, content=payload)
 
 
+def count_supported_files(folder: Path, extensions) -> int:
+    """Đếm file có extension được hỗ trợ trong folder (dùng cho guard của `/documents/refresh` — KB-4.10)."""
+    if not folder.exists():
+        return 0
+    supported = {ext.lower() for ext in extensions}
+    return sum(1 for path in folder.rglob("*") if path.is_file() and path.suffix.lower() in supported)
+
+
 @app.post("/documents/refresh", response_model=DocumentUploadResponse)
 async def refresh_documents(
         service: DocumentService = Depends(get_document_service)
@@ -284,6 +309,16 @@ async def refresh_documents(
     Refresh documents by re-loading from the default documents folder.
     This will clear existing documents and reload everything.
     """
+    # KB-4.10: refresh = clear + auto-load. Nếu folder không tồn tại/rỗng thì clear xong sẽ **mất index**
+    # mà không index lại được ⇒ chặn TRƯỚC khi clear.
+    setting = get_settings()
+    documents_path = Path(setting.documents_folder)
+    supported = count_supported_files(documents_path, setting.supported_extensions)
+    if not documents_path.exists() or supported == 0:
+        raise DocumentsFolderEmptyError(
+            f"refresh_documents: folder={documents_path} exists={documents_path.exists()} supported_files={supported}"
+        )
+
     try:
         # Clear existing documents first
         await service.clear_database()

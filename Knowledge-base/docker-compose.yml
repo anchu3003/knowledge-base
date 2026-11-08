@@ -21,6 +21,10 @@ services:
       #mount source code to docker auto refresh
 #      - .:/app
       - ./chroma_db:/app/chroma_db
+      # KB-4.10: tài liệu gốc — read-only. Trước đây `.dockerignore` loại `Interview/` nên container KHÔNG thấy
+      # folder ⇒ Refresh index sẽ clear 601 chunk rồi index 0 file (mất index). Mount ro: sửa/thêm file trên host
+      # là container thấy ngay, không cần build lại.
+      - ./Interview:/app/Interview:ro
       - hf-cache:/hf-cache
     restart: unless-stopped
     # healthcheck đã khai báo trong Dockerfile của BE (GET /health); ở compose nới `start_period` vì lần
