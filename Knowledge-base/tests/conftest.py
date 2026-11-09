@@ -43,12 +43,51 @@ def make_fake_settings(**overrides):
 
 
 class FakeChatService:
-    """Fake `ChatService`: trả answer/sources cố định, stream 4 event; `error` để test lỗi."""
+    """Fake `ChatService`: trả answer/sources cố định, stream 4 event; `error` để test lỗi.
 
-    def __init__(self, error=None):
+    KB-5.2: thêm phần lịch sử hội thoại (`list_conversations`/`get_conversation_detail`/
+    `clear_conversation`) để test endpoint `/conversations*` không cần SQLite/LLM thật.
+    """
+
+    def __init__(self, error=None, conversations=None):
         self.error = error
         self.chat_calls = []
         self.stream_calls = []
+        # id → list[dict] (đúng shape `ChatService` giữ trong RAM)
+        self.conversations = conversations if conversations is not None else {}
+
+    def list_conversations(self):
+        if self.error is not None:
+            raise self.error
+        items = []
+        for conversation_id, messages in self.conversations.items():
+            items.append(
+                {
+                    "id": conversation_id,
+                    "title": messages[0]["content"] if messages else "",
+                    "created_at": "2026-01-01T00:00:00",
+                    "updated_at": "2026-01-01T00:00:00",
+                    "message_count": len(messages),
+                }
+            )
+        return items
+
+    def get_conversation_detail(self, conversation_id):
+        if self.error is not None:
+            raise self.error
+        if conversation_id not in self.conversations:
+            return None
+        messages = self.conversations[conversation_id]
+        return {
+            "id": conversation_id,
+            "title": messages[0]["content"] if messages else "",
+            "created_at": "2026-01-01T00:00:00",
+            "updated_at": "2026-01-01T00:00:00",
+            "messages": messages,
+        }
+
+    def clear_conversation(self, conversation_id):
+        self.conversations.pop(conversation_id, None)
 
     async def chat(self, message, conversation_id=None, max_tokens=None, temperature=None):
         if self.error is not None:

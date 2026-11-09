@@ -12,6 +12,7 @@ from app.core.config import Settings
 from app.core.errors import AppError, map_provider_error
 from app.core.provider_retry import ProviderThrottle
 from app.services.document_service import DocumentService
+from app.services.conversation_store import ConversationStore
 from app.services.pii_service import PIIRedactor, summarize_pii_stats
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,17 @@ logger = logging.getLogger(__name__)
 class ChatService:
     """Service for handling chat interactions with RAG."""
 
-    def __init__(self, settings: Settings, document_service: DocumentService):
+    #: Mặc định = None để test có thể dựng service bằng `object.__new__(ChatService)` (không qua
+    #: `__init__`) mà `get_conversation_history` vẫn chạy — trước KB-5.2 attribute này không tồn tại
+    #: và 16 test cũ vỡ với `AttributeError`.
+    conversation_store: Optional[ConversationStore] = None
+
+    def __init__(
+            self,
+            settings: Settings,
+            document_service: DocumentService,
+            conversation_store: Optional[ConversationStore] = None,
+    ):
         self.settings = settings
         self.document_service = document_service
 
@@ -88,9 +99,10 @@ class ChatService:
                 logger.error(f"Failed to initialize ChatOpenAI: {str(e)}")
                 raise ValueError(f"Failed to initialize ChatOpenAI: {str(e)}. Please check your OpenAI configuration.")
 
-        # Store conversations in memory
-        # (In production, this should be replaced with a database)
+        # Conversation history: RAM là nguồn của phiên hiện tại, SQLite (`ConversationStore`) là bản bền
+        # (KB-5.2 — trả TD-2). Không có store (`CHAT_DB_PATH=` rỗng) ⇒ chỉ in-memory như trước.
         self.conversations: Dict[str, List[Dict[str, Any]]] = {}
+        self.conversation_store = conversation_store
 
         # PII/secret redaction applied to every payload sent to the LLM
         # (see .clinerules/30-pii-safety.md)
@@ -166,7 +178,8 @@ class ChatService:
             context = self.build_context(similar_docs)
 
             # Get conversation history
-            conversation_history = self.conversations.get(conversation_id, [])
+            # KB-5.2: lazy-load từ SQLite nếu RAM chưa có (restart container vẫn giữ context)
+            conversation_history = self.get_conversation_history(conversation_id)
 
             # Create a prompt with context and history
             system_prompt = self._create_system_prompt(context)
@@ -294,7 +307,8 @@ class ChatService:
             context = self.build_context(similar_docs)
 
             # Get conversation history
-            conversation_history = self.conversations.get(conversation_id, [])
+            # KB-5.2: lazy-load từ SQLite nếu RAM chưa có (restart container vẫn giữ context)
+            conversation_history = self.get_conversation_history(conversation_id)
 
             # Create a prompt with context and history
             system_prompt = self._create_system_prompt(context)
@@ -609,10 +623,14 @@ class ChatService:
 
         conversation = self.conversations[conversation_id]
 
+        # PII: **không** lưu bản thô xuống DB (giả định (b) của KB-5.2 + `.clinerules/30-pii-safety.md`).
+        # Hội thoại reload từ server vì thế có thể hiện placeholder `[EMAIL_1]` thay cho dữ liệu thật.
+        stored_user_message = self.pii.redact(user_message)
+
         # Add the user message
         conversation.append({
             "role": "user",
-            "content": user_message,
+            "content": stored_user_message,
             "timestamp": datetime.now().isoformat()
         })
 
@@ -630,6 +648,17 @@ class ChatService:
         max_length = self.settings.max_conversation_length * 2  # *2 for user+assistant pairs
         if len(conversation) > max_length:
             self.conversations[conversation_id] = conversation[-max_length:]
+
+        self._persist(conversation_id)
+
+    def _persist(self, conversation_id: str) -> None:
+        """Ghi conversation xuống SQLite (KB-5.2). Lỗi DB **không** được làm hỏng câu trả lời."""
+        if self.conversation_store is None:
+            return
+        try:
+            self.conversation_store.save(conversation_id, self.conversations.get(conversation_id, []))
+        except Exception as exc:  # pragma: no cover - phụ thuộc IO/disk
+            logger.error("Failed to persist conversation %s: %s: %s", conversation_id, type(exc).__name__, exc)
 
     @staticmethod
     def _format_sources(similar_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -656,14 +685,65 @@ class ChatService:
         return sources
 
     def get_conversation_history(self, conversation_id: str) -> List[Dict[str, Any]]:
-        """Get conversation history."""
+        """Get conversation history.
+
+        KB-5.2: cache RAM miss ⇒ nạp từ SQLite (lazy). Nhờ vậy `conversation_id` cũ vẫn giữ context
+        sau khi restart container, mà không phải nạp sẵn toàn bộ DB vào RAM lúc khởi động.
+        """
+        if conversation_id not in self.conversations and self.conversation_store is not None:
+            try:
+                messages = self.conversation_store.load(conversation_id)
+            except Exception as exc:  # pragma: no cover - phụ thuộc IO/disk
+                logger.error("Failed to load conversation %s: %s: %s", conversation_id, type(exc).__name__, exc)
+                messages = None
+            if messages is not None:
+                self.conversations[conversation_id] = messages
         return self.conversations.get(conversation_id, [])
 
     def clear_conversation(self, conversation_id: str):
-        """Clear a specific conversation."""
-        if conversation_id in self.conversations:
-            del self.conversations[conversation_id]
+        """Clear a specific conversation (RAM + SQLite)."""
+        self.conversations.pop(conversation_id, None)
+        if self.conversation_store is not None:
+            try:
+                self.conversation_store.delete(conversation_id)
+            except Exception as exc:  # pragma: no cover
+                logger.error("Failed to delete conversation %s: %s: %s", conversation_id, type(exc).__name__, exc)
 
-    def list_conversations(self) -> List[str]:
-        """List all conversation IDs."""
-        return list(self.conversations.keys())
+    def list_conversations(self) -> List[Dict[str, Any]]:
+        """Danh sách conversation (mới nhất trước).
+
+        KB-5.2: server là nguồn sự thật ⇒ đọc từ SQLite. Không có store ⇒ chỉ trả id trong RAM
+        (giữ kiểu dữ liệu cũ cho ai đang gọi trực tiếp).
+        """
+        if self.conversation_store is not None:
+            try:
+                return self.conversation_store.list(limit=self.settings.max_conversations)
+            except Exception as exc:  # pragma: no cover
+                logger.error("Failed to list conversations: %s: %s", type(exc).__name__, exc)
+                return []
+        now = datetime.now().isoformat()
+        return [
+            {
+                "id": conversation_id,
+                "title": "",
+                "created_at": now,
+                "updated_at": now,
+                "message_count": len(messages),
+            }
+            for conversation_id, messages in self.conversations.items()
+        ]
+
+    def get_conversation_detail(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+        """Chi tiết 1 conversation (kèm messages) hoặc `None` nếu không tồn tại."""
+        messages = self.get_conversation_history(conversation_id)
+        summaries = {item["id"]: item for item in self.list_conversations()}
+        summary = summaries.get(conversation_id)
+        if summary is None and not messages:
+            return None
+        return {
+            "id": conversation_id,
+            "title": (summary or {}).get("title", ""),
+            "created_at": (summary or {}).get("created_at", ""),
+            "updated_at": (summary or {}).get("updated_at", ""),
+            "messages": messages,
+        }

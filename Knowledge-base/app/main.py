@@ -21,8 +21,10 @@ logging.getLogger("chromadb.telemetry").setLevel(logging.ERROR)
 from app.core.config import get_settings
 from app.core.errors import (
     AppError,
+    ConversationStoreError,
     DocumentStoreError,
     DocumentsFolderEmptyError,
+    NotFoundError,
     ServiceUnavailableError,
     error_body,
     http_status_error,
@@ -31,10 +33,13 @@ from app.core.middleware import RequestIDMiddleware, get_request_id
 from app.core.sse import SSE_HEADERS, sse_event_stream
 from app.services.document_service import DocumentService
 from app.services.chat_service import ChatService
+from app.services.conversation_store import ConversationStore
 from app.services.health_service import HealthService
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
+    ConversationDetail,
+    ConversationListResponse,
     DocumentUploadResponse,
     DocumentSyncResponse,
     HealthResponse,
@@ -46,16 +51,18 @@ from app.models.schemas import (
 document_service: Optional[DocumentService] = None
 chat_service: Optional[ChatService] = None
 health_service: Optional[HealthService] = None
+conversation_store: Optional[ConversationStore] = None
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Initialize services on startup and cleanup on shutdown"""
-    global document_service, chat_service, health_service
+    global document_service, chat_service, health_service, conversation_store
 
     document_service = None
     chat_service = None
     health_service = None
+    conversation_store = None
 
     try:
         setting = get_settings()
@@ -72,7 +79,21 @@ async def lifespan(application: FastAPI):
 
         try:
             print("Initializing chat service...")
-            chat_service = ChatService(setting, document_service)
+            # Lịch sử hội thoại bền (KB-5.2): SQLite trong `CHAT_DB_PATH`. Không mở được DB ⇒ vẫn chạy
+            # (chat in-memory) thay vì chặn startup — mất lịch sử còn hơn không lên được.
+            if setting.chat_db_path:
+                try:
+                    conversation_store = ConversationStore(
+                        setting.chat_db_path, max_conversations=setting.max_conversations
+                    )
+                    print(
+                        f"Conversation store ready: {setting.chat_db_path} "
+                        f"({conversation_store.count()} session đã lưu, max={setting.max_conversations})"
+                    )
+                except Exception as e:
+                    print(f"Warning: conversation store unavailable ({type(e).__name__}: {e}) — chat only in memory")
+                    conversation_store = None
+            chat_service = ChatService(setting, document_service, conversation_store=conversation_store)
             print("Chat service initialized")
         except Exception as e:
             print(f"Failed to initialize chat service: {str(e)}")
@@ -120,6 +141,8 @@ async def lifespan(application: FastAPI):
         try:
             if document_service:
                 await document_service.cleanup()
+            if conversation_store:
+                conversation_store.close()
             print("RAG Chatbot API shutdown complete")
         except Exception as e:
             print(f"Error during cleanup: {str(e)}")
@@ -482,6 +505,59 @@ async def chat_stream(
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
+
+
+@app.get("/conversations", response_model=ConversationListResponse)
+async def list_conversations(
+        service: ChatService = Depends(get_chat_service)
+):
+    """Danh sách hội thoại đã lưu (mới nhất trước) — KB-5.2.
+
+    Server là **nguồn sự thật** về lịch sử; FE dùng endpoint này lúc mở app và chỉ fallback
+    `localStorage` khi request lỗi (BE tắt/mất mạng).
+    """
+    try:
+        items = service.list_conversations()
+        return ConversationListResponse(conversations=items, total=len(items))
+    except AppError:
+        raise
+    except Exception as e:
+        raise ConversationStoreError(f"list_conversations: {type(e).__name__}: {e}") from e
+
+
+@app.get("/conversations/{conversation_id}", response_model=ConversationDetail)
+async def get_conversation(
+        conversation_id: str,
+        service: ChatService = Depends(get_chat_service)
+):
+    """Chi tiết 1 hội thoại (kèm messages) — 404 nếu chưa từng có."""
+    try:
+        detail = service.get_conversation_detail(conversation_id)
+        if detail is None:
+            raise NotFoundError(f"Không tìm thấy hội thoại '{conversation_id}'")
+        return ConversationDetail(**detail)
+    except AppError:
+        raise
+    except Exception as e:
+        raise ConversationStoreError(f"get_conversation: {type(e).__name__}: {e}") from e
+
+
+@app.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+        conversation_id: str,
+        service: ChatService = Depends(get_chat_service)
+):
+    """Xoá hội thoại (RAM + SQLite). 404 nếu không tồn tại — KHÔNG im lặng trả 200."""
+    try:
+        existed = service.get_conversation_detail(conversation_id) is not None
+        if not existed:
+            raise NotFoundError(f"Không tìm thấy hội thoại '{conversation_id}'")
+        service.clear_conversation(conversation_id)
+        return JSONResponse(content={"message": "Đã xoá hội thoại", "conversation_id": conversation_id})
+    except AppError:
+        raise
+    except Exception as e:
+        raise ConversationStoreError(f"delete_conversation: {type(e).__name__}: {e}") from e
 
 
 @app.get("/documents/status")
