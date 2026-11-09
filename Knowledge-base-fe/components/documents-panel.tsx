@@ -407,7 +407,16 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
 
     useEffect(() => {
         if (!open) return;
-        void load();
+        let cancelled = false;
+        // KB-5.6: nhường 1 microtask trước khi gọi `load()` ⇒ `setLoading(true)` không còn là setState
+        // **đồng bộ trong effect** (rule `react-hooks/set-state-in-effect`), hành vi không đổi.
+        void (async () => {
+            await Promise.resolve();
+            if (!cancelled) await load();
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [open, load]);
 
     // Esc + focus trap + aria-modal: Radix `Sheet` (Dialog) lo, không cần effect thủ công (KB-4.8)

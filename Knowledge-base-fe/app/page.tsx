@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useRef, useState, useSyncExternalStore} from 'react';
+import {useCallback, useEffect, useRef, useState, useSyncExternalStore} from 'react';
 
 import {AppHeader} from '@/components/app-header';
 import {AppSidebar, SidebarContent, type ChatSession} from '@/components/app-sidebar';
@@ -423,10 +423,13 @@ export default function ChatPage() {
     /**
      * Bấm chip `[S#]` trong câu trả lời (KB-4.2) → panel nguồn scroll + highlight đúng card (KB-4.3).
      * Cần `messageId` vì mỗi câu trả lời có panel riêng; `nonce` để bấm lại cùng chip vẫn highlight lại.
+     *
+     * `useCallback` (KB-5.6): giữ identity ổn định để `MessageWithCitations` (`memo`) không render lại
+     * mọi message mỗi khi có token mới — nếu không, `memo` vô tác dụng vì prop là closure mới.
      */
-    const handleCitationClick = (messageId: string, citationId: string) => {
+    const handleCitationClick = useCallback((messageId: string, citationId: string) => {
         setCitationFocus((previous) => ({messageId, citationId, nonce: (previous?.nonce ?? 0) + 1}));
-    };
+    }, []);
 
     // ---- Session actions (KB-4.9: lưu trong `localStorage` qua `chat-store`) ----
 
