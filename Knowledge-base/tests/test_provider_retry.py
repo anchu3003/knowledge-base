@@ -335,41 +335,16 @@ class CountingLLM:
 
 
 def make_chat_service(llm, *, enable_query_rewrite=False, recorder=None, **provider_overrides):
-    values = dict(
-        default_max_tokens=128,
-        default_temperature=0.0,
-        retrieval_k=3,
-        enable_query_rewrite=enable_query_rewrite,
-        rewrite_system_prompt_path=None,
-        rewrite_min_results=2,
-        rewrite_min_top_score=0.3,
-        rewrite_max_attempts=2,
-        # KB-5.4: cờ multi-query (TẮT để các test 1-bước cũ giữ nguyên hành vi)
-        multi_query_enabled=False,
-        multi_query_max_parts=3,
-        max_conversation_length=10,
-        system_prompt_path=None,
-        context_max_chars=6000,
-        openai_model="fake-model",
-        openai_base_url="",
-        enable_pii_redaction=True,
-        pii_placeholder="[REDACTED:{type}]",
-        provider_timeout_seconds=60.0,
-        provider_max_retries=2,
-        provider_retry_base_delay=2.0,
-        provider_max_concurrency=1,
-    )
-    values.update(provider_overrides)
-    settings = SimpleNamespace(**values)
-    throttle = ProviderThrottle(settings, sleep=recorder or SleepRecorder())
+    """KB-5.9 (TD-27): builder chung + throttle riêng (để đo retry)."""
+    from tests.builders import make_chat_service as build_chat_service, make_settings
 
-    service = object.__new__(ChatService)
-    service.settings = settings
-    service.document_service = FakeDocumentService()
-    service.llm = llm
-    service.conversations = {}
-    service.pii = PIIRedactor(settings)
-    service.provider = throttle
+    settings = make_settings(
+        enable_query_rewrite=enable_query_rewrite,
+        provider_max_retries=provider_overrides.pop("provider_max_retries", 2),
+        **provider_overrides,
+    )
+    service = build_chat_service(llm=llm, settings=settings)
+    service.provider = ProviderThrottle(settings, sleep=recorder or SleepRecorder())
     return service
 
 

@@ -119,18 +119,29 @@ def test_readiness_error_when_api_key_missing():
     assert "OPENAI_API_KEY" in payload["checks"]["provider_config"]["detail"]
 
 
-def test_readiness_error_when_prompt_file_missing(tmp_path):
+def test_readiness_ok_when_prompt_file_missing_uses_fallback(tmp_path):
+    """KB-5.9 (trả TD-19): thiếu prompt file **không** làm `/ready` đỏ — ChatService có fallback trong code."""
     missing = tmp_path / "system_prompt.txt"
     service = HealthService(make_settings(system_prompt_path=str(missing)))
 
     payload, http_status = readiness(service, document_service=make_document_service(7))
 
-    assert http_status == 503
-    assert payload["status"] == "error"
-    assert payload["checks"]["prompt_file"] == {
-        "ok": False,
-        "detail": "prompt file not found: system_prompt.txt",
-    }
+    assert http_status == 200
+    assert payload["status"] == "ok"
+    assert payload["checks"]["prompt_file"]["ok"] is True
+    assert "fallback" in payload["checks"]["prompt_file"]["detail"]
+    assert "system_prompt.txt" in payload["checks"]["prompt_file"]["detail"]
+
+
+def test_readiness_ok_when_prompt_path_not_set():
+    """`SYSTEM_PROMPT_PATH` rỗng cũng chỉ là thông tin — không phải lỗi."""
+    service = HealthService(make_settings(system_prompt_path=None))
+
+    payload, http_status = readiness(service, document_service=make_document_service(7))
+
+    assert http_status == 200
+    assert payload["checks"]["prompt_file"]["ok"] is True
+    assert "fallback" in payload["checks"]["prompt_file"]["detail"]
 
 
 # ------------------------------

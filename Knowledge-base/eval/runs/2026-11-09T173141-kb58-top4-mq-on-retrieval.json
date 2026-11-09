@@ -1,0 +1,432 @@
+{
+  "mode": "retrieval",
+  "tag": "kb58-top4-mq-on",
+  "timestamp": "2026-11-09T173141",
+  "summary": {
+    "questions": 20,
+    "hit_at_k": 1.0,
+    "mrr": 0.883,
+    "dup_ratio": 0.0,
+    "precision_at_k": 0.483,
+    "distinct_file_ratio": 0.867,
+    "latency_p50": 1.115
+  },
+  "config": {
+    "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
+    "collection": "documents",
+    "collection_count": 601,
+    "retrieval_k": 3,
+    "enable_hybrid": true,
+    "hybrid_alpha": 0.5,
+    "enable_rerank": true,
+    "rerank_top_n": 4,
+    "multi_query_enabled": true,
+    "rerank_model": "BAAI/bge-reranker-v2-m3",
+    "similarity_threshold": 0.0,
+    "chunk_size": 1000,
+    "chunk_overlap": 200,
+    "questions": 20
+  },
+  "rows": [
+    {
+      "id": "q01",
+      "question": "Saga pattern giải quyết vấn đề gì trong microservices và tại sao không dùng 2PC?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.667,
+      "distinct_file_ratio": 0.667,
+      "latency": 4.74,
+      "top_files": [
+        "Interview/Backend&Devops/Design patterns & Architecture/Saga Pattern.md",
+        "Interview/Backend&Devops/Design patterns & Architecture/Saga Pattern.md",
+        "Interview/Backend&Devops/Design patterns & Architecture/Orchestration.md"
+      ],
+      "scores": [
+        0.9494,
+        0.8894,
+        0.4881
+      ]
+    },
+    {
+      "id": "q02",
+      "question": "Chuẩn hoá database (normalization) nhằm mục đích gì?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.667,
+      "distinct_file_ratio": 0.667,
+      "latency": 0.67,
+      "top_files": [
+        "Interview/Backend&Devops/DBMS & SQL/Data Normalization.md",
+        "Interview/Backend&Devops/DBMS & SQL/Data Normalization.md",
+        "Interview/Backend&Devops/DBMS & SQL.md"
+      ],
+      "scores": [
+        0.9613,
+        0.0641,
+        0.0131
+      ]
+    },
+    {
+      "id": "q03",
+      "question": "Khi nào nên dùng B-Tree index và khi nào nên dùng Hash index?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 1.0,
+      "distinct_file_ratio": 0.333,
+      "latency": 1.135,
+      "top_files": [
+        "Interview/Backend&Devops/DBMS & SQL/Index.md",
+        "Interview/Backend&Devops/DBMS & SQL/Index.md",
+        "Interview/Backend&Devops/DBMS & SQL/Index.md"
+      ],
+      "scores": [
+        0.9857,
+        0.7098,
+        0.3153
+      ]
+    },
+    {
+      "id": "q04",
+      "question": "API Gateway có những trách nhiệm gì và Zuul khác Spring Cloud Gateway ở điểm nào?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.487,
+      "top_files": [
+        "Interview/Backend&Devops/Microservices/API Gateway.md",
+        "Interview/Backend&Devops/Technical Aspects/Messaging.md",
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Cloud.md"
+      ],
+      "scores": [
+        0.9789,
+        0.7368,
+        0.5661
+      ]
+    },
+    {
+      "id": "q05",
+      "question": "Client-side load balancing với Netflix Ribbon có đặc điểm và tính năng gì?",
+      "hit": true,
+      "rank": 2,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.094,
+      "top_files": [
+        "Interview/Backend&Devops/Technical Aspects/Concurrent Handling.md",
+        "Interview/Backend&Devops/Microservices/Client Side Load balancer.md",
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Cloud.md"
+      ],
+      "scores": [
+        0.9,
+        0.7959,
+        0.5817
+      ]
+    },
+    {
+      "id": "q06",
+      "question": "Container trong Docker khác image như thế nào?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.667,
+      "distinct_file_ratio": 0.667,
+      "latency": 2.301,
+      "top_files": [
+        "Interview/Backend&Devops/Tools/Docker.md",
+        "Interview/Backend&Devops/Tools/Docker.md",
+        "Interview/Backend&Devops/Technical Aspects/Concurrent Handling.md"
+      ],
+      "scores": [
+        0.898,
+        0.4121,
+        0.0
+      ]
+    },
+    {
+      "id": "q07",
+      "question": "Optimistic locking trong JPA được implement như thế nào?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.687,
+      "top_files": [
+        "Interview/Backend&Devops/Java/ORM&JPA/JPA & Hibernate.md",
+        "Interview/Backend&Devops/Java/ORM&JPA/Hibernate problems and solutions.md",
+        "Interview/Backend&Devops/Java/ORM&JPA/ORM.md"
+      ],
+      "scores": [
+        0.6453,
+        0.419,
+        0.0098
+      ]
+    },
+    {
+      "id": "q08",
+      "question": "Sự khác nhau giữa @BeforeEach và @BeforeAll trong JUnit 5 là gì?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.667,
+      "distinct_file_ratio": 0.667,
+      "latency": 0.794,
+      "top_files": [
+        "Interview/Backend&Devops/Java/JUnit 5.md",
+        "Interview/Backend&Devops/Technical Aspects/Concurrent Handling.md",
+        "Interview/Backend&Devops/Java/JUnit 5.md"
+      ],
+      "scores": [
+        0.9689,
+        0.7385,
+        0.0022
+      ]
+    },
+    {
+      "id": "q09",
+      "question": "Spring Boot là gì và lợi ích chính so với cấu hình Spring truyền thống?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 0.928,
+      "top_files": [
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Boot.md",
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Cloud.md",
+        "Interview/Backend&Devops/DBMS & SQL/Compare DBMS.md"
+      ],
+      "scores": [
+        0.999,
+        0.8792,
+        0.8726
+      ]
+    },
+    {
+      "id": "q10",
+      "question": "Discovery server (Eureka naming server) có những chức năng chính nào?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 0.667,
+      "latency": 0.908,
+      "top_files": [
+        "Interview/Backend&Devops/Microservices/Discovery Server.md",
+        "Interview/Backend&Devops/Microservices.md",
+        "Interview/Backend&Devops/Microservices.md"
+      ],
+      "scores": [
+        0.8871,
+        0.2315,
+        0.0377
+      ]
+    },
+    {
+      "id": "q11",
+      "question": "Spring Cloud Config Server dùng để làm gì?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.202,
+      "top_files": [
+        "Interview/Backend&Devops/Microservices/Config Server.md",
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Cloud.md",
+        "Interview/Backend&Devops/Microservices.md"
+      ],
+      "scores": [
+        0.9939,
+        0.2577,
+        0.0951
+      ]
+    },
+    {
+      "id": "q12",
+      "question": "Phân biệt stateless và stateful authentication trong Spring Security?",
+      "hit": true,
+      "rank": 3,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.215,
+      "top_files": [
+        "Interview/Backend&Devops/Technical Aspects/Concurrent Handling.md",
+        "Interview/Backend&Devops/Microservices.md",
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Security.md"
+      ],
+      "scores": [
+        0.6792,
+        0.6789,
+        0.6586
+      ]
+    },
+    {
+      "id": "q13",
+      "question": "Quy trình optimize một câu query SQL chậm gồm những bước nào?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.067,
+      "top_files": [
+        "Interview/Backend&Devops/DBMS & SQL/Optimize Query.md",
+        "Interview/Backend&Devops/DBMS & SQL/Oracle Sql Hints.md",
+        "Interview/Backend&Devops/Java/ORM&JPA/ORM.md"
+      ],
+      "scores": [
+        0.0397,
+        0.0253,
+        0.0012
+      ]
+    },
+    {
+      "id": "q14",
+      "question": "Các lệnh git CLI cơ bản để commit và push code là gì?",
+      "hit": true,
+      "rank": 2,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.035,
+      "top_files": [
+        "Interview/Backend&Devops/Java/Core.md",
+        "Interview/Backend&Devops/Tools/Git.md",
+        "Interview/Backend&Devops/Technical Aspects/Concurrent Handling.md"
+      ],
+      "scores": [
+        0.9101,
+        0.8748,
+        0.001
+      ]
+    },
+    {
+      "id": "q15",
+      "question": "RabbitMQ là gì và exchange có vai trò gì trong RabbitMQ?",
+      "hit": true,
+      "rank": 3,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.031,
+      "top_files": [
+        "Interview/Backend&Devops/Technical Aspects/Concurrent Handling.md",
+        "Interview/Backend&Devops/Design patterns & Architecture/Orchestration.md",
+        "Interview/Backend&Devops/Messaging/Rabitmq.md"
+      ],
+      "scores": [
+        0.9398,
+        0.9082,
+        0.7069
+      ]
+    },
+    {
+      "id": "q16",
+      "question": "API Gateway xử lý authentication ở tầng nào và nó liên quan gì tới Spring Security?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.667,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.091,
+      "top_files": [
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Security.md",
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Cloud.md",
+        "Interview/Backend&Devops/Microservices/API Gateway.md"
+      ],
+      "scores": [
+        0.6747,
+        0.4699,
+        0.4366
+      ]
+    },
+    {
+      "id": "q17",
+      "question": "Docker image khác container như thế nào và Spring Boot đóng gói app thành image ra sao?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.214,
+      "top_files": [
+        "Interview/Backend&Devops/Tools/Docker.md",
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Batch.md",
+        "Interview/Backend&Devops/DBMS & SQL/Compare DBMS.md"
+      ],
+      "scores": [
+        0.8784,
+        0.6822,
+        0.5092
+      ]
+    },
+    {
+      "id": "q18",
+      "question": "Discovery Server (Eureka) và Config Server khác nhau ở vai trò gì trong hệ microservice?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.407,
+      "top_files": [
+        "Interview/Backend&Devops/Microservices/Discovery Server.md",
+        "Interview/Backend&Devops/Microservices.md",
+        "Interview/Backend&Devops/Design patterns & Architecture/Orchestration.md"
+      ],
+      "scores": [
+        0.954,
+        0.6578,
+        0.6133
+      ]
+    },
+    {
+      "id": "q19",
+      "question": "Khi optimize một câu query SQL chậm thì nên xem index nào và dùng hint ra sao?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 1.0,
+      "distinct_file_ratio": 0.667,
+      "latency": 1.029,
+      "top_files": [
+        "Interview/Backend&Devops/DBMS & SQL/Oracle Sql Hints.md",
+        "Interview/Backend&Devops/DBMS & SQL/Index.md",
+        "Interview/Backend&Devops/DBMS & SQL/Index.md"
+      ],
+      "scores": [
+        0.941,
+        0.7627,
+        0.0018
+      ]
+    },
+    {
+      "id": "q20",
+      "question": "Saga pattern và RabbitMQ phối hợp thế nào để đảm bảo eventual consistency giữa các service?",
+      "hit": true,
+      "rank": 1,
+      "dup_ratio": 0.0,
+      "precision_at_k": 0.333,
+      "distinct_file_ratio": 1.0,
+      "latency": 1.137,
+      "top_files": [
+        "Interview/Backend&Devops/Design patterns & Architecture/Saga Pattern.md",
+        "Interview/Backend&Devops/Technical Aspects/Concurrent Handling.md",
+        "Interview/Backend&Devops/Java/Spring Projects/Spring Batch.md"
+      ],
+      "scores": [
+        0.9991,
+        0.8487,
+        0.6519
+      ]
+    }
+  ]
+}

@@ -92,15 +92,18 @@ class Settings(BaseSettings):
     hybrid_alpha: float = Field(default=0.5, alias="HYBRID_ALPHA")  # weight for dense vs. sparse
     hybrid_candidate_k: int = Field(default=20, alias="HYBRID_CANDIDATE_K")
     enable_rerank: bool = Field(default=True, alias="ENABLE_RERANK")
-    # KB-5.3 (trả TD-15): đo bằng `eval/run_eval.py` 15 câu vàng, cache rerank TẮT để so sánh công bằng.
-    # | RERANK_TOP_N | latency_p50 | hit@k | MRR   | precision@k | distinct_file_ratio |
-    # | 20 (cũ)      | 11.374 s    | 1.0   | 1.0   | 0.533       | 0.756               |
-    # | 12           |  7.966 s    | 1.0   | 1.0   | 0.556       | 0.756               |
-    # |  8 (mới)     |  4.527 s    | 1.0   | 1.0   | 0.556       | 0.734  (−2.9%)      |
-    # |  6           |  3.271 s    | 1.0   | 1.0   | 0.578       | 0.711  (−5.9% ✗)    |
-    # Chốt 8: latency **−60%** mà Recall@3/MRR **không đổi** và mọi metric trong ngưỡng ≤5% (Q1).
-    # top-N=6 nhanh hơn nhưng `distinct_file_ratio` vượt ngưỡng ⇒ không lấy.
-    rerank_top_n: int = Field(default=8, alias="RERANK_TOP_N")
+    # KB-5.3 (trả TD-15) + KB-5.8 (trả TD-29): đo bằng `eval/run_eval.py`, bộ vàng v3 = **20 câu**, cache TẮT.
+    # | # | Cấu hình (20 câu)                    | hit@k | MRR   | precision@k | distinct | p50      |
+    # | 1 | top-8, multi-query OFF (baseline)    | 1.0   | 0.975 | 0.533       | 0.784    | 9.702 s  |
+    # | 2 | top-8, multi-query ON (đang chạy)    | 1.0   | 0.975 | 0.617       | 0.750    | 6.500 s  |
+    # | 3 | top-6, multi-query OFF               | 1.0   | 1.000 | 0.567       | 0.750    | 3.321 s  |
+    # | 4 | top-6, multi-query ON, parts=top//2  | 1.0   | 0.975 | 0.567 (−8%) | 0.750    | 1.883 s  |
+    # | 5 | **top-6, multi-query ON, parts=full**| 1.0   | 0.975 | **0.617**   | 0.783    | **3.439 s** |
+    # | 6 | top-4, multi-query OFF               | 1.0   | 1.000 | 0.550       | 0.767    | 2.002 s  |
+    # | 7 | top-4, multi-query ON, parts=top//2  | 1.0   | 0.883 | 0.483       | 0.867    | 1.115 s  |
+    # Chốt **6** (#5): mọi metric chất lượng **bằng hoặc tốt hơn** cấu hình đang chạy (#2), p50 **−47%**.
+    # #4 và #7 nhanh hơn nhưng mỗi phần chỉ chấm `top//2` ⇒ precision tụt >5% (đó là lý do phần nay chấm đủ top-N).
+    rerank_top_n: int = Field(default=6, alias="RERANK_TOP_N")
     rerank_model: str = Field(default="BAAI/bge-reranker-v2-m3", alias="RERANK_MODEL")
 
     # Cache điểm rerank trong RAM (KB-5.3 — trả TD-15). Khoá = query + index_version + tham số ⇒
@@ -128,6 +131,8 @@ class Settings(BaseSettings):
 
     # Prompt Settings
     # Path to the system prompt template file. The template may contain a `{context}` placeholder.
+    # KB-5.9 (trả TD-18): level cho logger `app.*` (INFO thấy được log thật thay vì chỉ print).
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     system_prompt_path: str = Field(default="./prompts/system_prompt.txt", alias="SYSTEM_PROMPT_PATH")
     # Path to the query rewrite system prompt. No placeholders required.
     rewrite_system_prompt_path: str = Field(default="./prompts/rewrite_system_prompt.txt",
