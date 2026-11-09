@@ -87,8 +87,22 @@ class Settings(BaseSettings):
     hybrid_alpha: float = Field(default=0.5, alias="HYBRID_ALPHA")  # weight for dense vs. sparse
     hybrid_candidate_k: int = Field(default=20, alias="HYBRID_CANDIDATE_K")
     enable_rerank: bool = Field(default=True, alias="ENABLE_RERANK")
-    rerank_top_n: int = Field(default=20, alias="RERANK_TOP_N")
+    # KB-5.3 (trả TD-15): đo bằng `eval/run_eval.py` 15 câu vàng, cache rerank TẮT để so sánh công bằng.
+    # | RERANK_TOP_N | latency_p50 | hit@k | MRR   | precision@k | distinct_file_ratio |
+    # | 20 (cũ)      | 11.374 s    | 1.0   | 1.0   | 0.533       | 0.756               |
+    # | 12           |  7.966 s    | 1.0   | 1.0   | 0.556       | 0.756               |
+    # |  8 (mới)     |  4.527 s    | 1.0   | 1.0   | 0.556       | 0.734  (−2.9%)      |
+    # |  6           |  3.271 s    | 1.0   | 1.0   | 0.578       | 0.711  (−5.9% ✗)    |
+    # Chốt 8: latency **−60%** mà Recall@3/MRR **không đổi** và mọi metric trong ngưỡng ≤5% (Q1).
+    # top-N=6 nhanh hơn nhưng `distinct_file_ratio` vượt ngưỡng ⇒ không lấy.
+    rerank_top_n: int = Field(default=8, alias="RERANK_TOP_N")
     rerank_model: str = Field(default="BAAI/bge-reranker-v2-m3", alias="RERANK_MODEL")
+
+    # Cache điểm rerank trong RAM (KB-5.3 — trả TD-15). Khoá = query + index_version + tham số ⇒
+    # sync/refresh tài liệu là tự vô hiệu. TTL chặn kết quả cũ ám quá lâu.
+    rerank_cache_enabled: bool = Field(default=True, alias="RERANK_CACHE_ENABLED")
+    rerank_cache_ttl_seconds: int = Field(default=3600, alias="RERANK_CACHE_TTL_SECONDS")
+    rerank_cache_max_entries: int = Field(default=256, alias="RERANK_CACHE_MAX_ENTRIES")
 
     # Chat Settings
     default_temperature: float = Field(default=0.7, alias="DEFAULT_TEMPERATURE")
