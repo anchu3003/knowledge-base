@@ -1,4 +1,3 @@
-import type React from "react"
 // User and role type definitions for OnboardAI
 
 export type UserRole = "admin" | "developer" | "document_manager"
@@ -93,7 +92,7 @@ export interface ChatMessage {
     id: string
     role: 'user' | 'assistant'
     content: string
-    citations?: Array<{ id: string; title: string; source: string; relevance: number }>
+    /** Nguồn của câu trả lời — render bằng `SourcesPanel` (KB-4.3). Field `citations` cũ đã xoá ở KB-5.6. */
     sources?: ChatSource[]
     metadata?: ChatMetadata
     /** Đang stream token (KB-4.4) — không lưu vào `localStorage`. */

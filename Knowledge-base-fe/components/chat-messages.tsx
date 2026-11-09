@@ -145,10 +145,10 @@ export function ChatMessages({
                                 <MessageWithCitations
                                     content={message.content}
                                     isStreaming={message.isStreaming}
-                                    citations={message.citations}
                                     isUser={isUser}
+                                    messageId={message.id}
                                     stopped={message.stopped}
-                                    onCitationClick={(citationId) => onCitationClick(message.id, citationId)}
+                                    onCitationClick={onCitationClick}
                                 />
                                 )}
                             </div>

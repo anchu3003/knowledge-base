@@ -78,6 +78,7 @@ npm run test:e2e                        # ~5s cho 7 check, tự bật `npm run d
 | Theme | sáng → tối: `.dark` + `color-scheme` + `localStorage['kb.theme']` |
 | Lịch sử | seed `localStorage` rồi reload: message + tiêu đề session còn, markdown render |
 | Lịch sử server (KB-5.2) | `localStorage` rỗng vẫn thấy hội thoại từ `GET /conversations` + messages nạp lazy; BE tắt ⇒ fallback `localStorage`, không trắng màn hình |
+| Stream render (KB-5.6) | đang stream: plain text (`**Đậm**` còn nguyên dấu) + **không** có chip; sau `end`: markdown (`<strong>`) + chip `[S1]` bấm được |
 | Sheet | `role=dialog`, focus nằm trong sheet, ESC đóng |
 | Panel Nguồn | path/snippet dài (kể cả token không dấu cách) **không được rộng hơn cột chat** |
 | 1900px | cửa sổ rộng vẫn không tràn ngang |

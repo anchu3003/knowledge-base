@@ -355,6 +355,57 @@ async function startSseServer(frames: Array<{delayMs: number; payload: Record<st
     };
 }
 
+test.describe('Stream: plain text khi đang viết, markdown khi xong (KB-5.6)', () => {
+    test('chip [S1] chỉ xuất hiện sau `end` (không parse markdown mỗi token)', async ({page}) => {
+        const sse = await startSseServer([
+            {delayMs: 0, payload: {type: 'start', conversation_id: 'conv-kb56', metadata: {model: 'openai/gpt-oss-120b'}}},
+            {delayMs: 300, payload: {type: 'token', token: '**Đậm** và '}},
+            {delayMs: 1200, payload: {type: 'token', token: 'nguồn [S1]'}},
+            {
+                delayMs: 300,
+                payload: {
+                    type: 'end',
+                    answer: '**Đậm** và nguồn [S1]',
+                    sources: [{
+                        citation_id: 'S1',
+                        chunk_id: 'bbbbbbbbbbbbbbb1',
+                        file_name: 'Kafka.md',
+                        file_path: 'Interview/Messaging/Kafka.md',
+                        file_type: 'md',
+                        relevance_score: 0.91,
+                        snippet: 'Kafka là message broker.',
+                    }],
+                    metadata: {model: 'openai/gpt-oss-120b'},
+                },
+            },
+        ]);
+
+        try {
+            await page.route('**/chat/stream', (route) =>
+                route.continue({url: sse.url, headers: {...route.request().headers()}}),
+            );
+
+            await page.goto('/');
+            await page.getByRole('textbox', {name: 'Câu hỏi'}).fill('Câu hỏi kiểm tra stream');
+            await page.getByRole('button', {name: 'Gửi câu hỏi'}).click();
+
+            // Đang stream: nội dung là plain text, `**Đậm**` hiện nguyên dấu sao, chưa có chip
+            const plain = page.getByTestId('streaming-plaintext');
+            await expect(plain).toBeVisible({timeout: 5000});
+            await expect(plain).toContainText('**Đậm**');
+            await expect(page.getByRole('button', {name: 'Xem nguồn S1'})).toHaveCount(0);
+
+            // `end` tới: markdown render (Đậm thành <strong>) + chip [S1] bấm được
+            await expect(page.getByRole('button', {name: 'Xem nguồn S1'})).toBeVisible({timeout: 5000});
+            await expect(page.locator('strong', {hasText: 'Đậm'})).toBeVisible();
+            await expect(page.getByTestId('streaming-plaintext')).toHaveCount(0);
+            await page.screenshot({path: 'test-results/shot-14-markdown-after-end.png'});
+        } finally {
+            await sse.close();
+        }
+    });
+});
+
 test.describe('Pha truy hồi & answer rỗng (KB-4.11)', () => {
     test('hiện "Đang truy hồi tài liệu (ns)" rồi "Đang viết câu trả lời"', async ({page}) => {
         // Mô phỏng BE thật: `start` tới sau 2.5s (redanch CPU ~12.9s — TD-15), token cách 1.2s
