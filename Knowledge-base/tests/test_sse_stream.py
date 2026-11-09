@@ -107,37 +107,12 @@ class BlockingStreamLLM:
 
 
 def make_chat_service(llm, *, provider_max_retries=0) -> ChatService:
-    settings = SimpleNamespace(
-        default_max_tokens=128,
-        default_temperature=0.0,
-        retrieval_k=3,
-        enable_query_rewrite=False,
-        rewrite_system_prompt_path=None,
-        rewrite_min_results=2,
-        rewrite_min_top_score=0.3,
-        rewrite_max_attempts=2,
-        # KB-5.4: cờ multi-query (TẮT để các test 1-bước cũ giữ nguyên hành vi)
-        multi_query_enabled=False,
-        multi_query_max_parts=3,
-        max_conversation_length=10,
-        system_prompt_path=None,
-        context_max_chars=6000,
-        openai_model="fake-model",
-        openai_base_url="",
-        enable_pii_redaction=True,
-        pii_placeholder="[REDACTED:{type}]",
-        provider_timeout_seconds=60.0,
-        provider_max_retries=provider_max_retries,
-        provider_retry_base_delay=2.0,
-        provider_max_concurrency=1,
-        sse_heartbeat_seconds=15.0,
-    )
-    service = object.__new__(ChatService)
-    service.settings = settings
+    """KB-5.9 (TD-27): dùng builder chung — không tự dựng SimpleNamespace thiếu field nữa."""
+    from tests.builders import make_chat_service as build_chat_service, make_settings
+
+    settings = make_settings(provider_max_retries=provider_max_retries, sse_heartbeat_seconds=15.0)
+    service = build_chat_service(llm=llm, settings=settings)
     service.document_service = FakeDocumentService()
-    service.llm = llm
-    service.conversations = {}
-    service.pii = PIIRedactor(settings)
     service.provider = ProviderThrottle(settings, sleep=SleepRecorder())
     return service
 

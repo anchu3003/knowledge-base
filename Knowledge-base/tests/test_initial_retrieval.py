@@ -78,8 +78,8 @@ def test_multi_intent_retrieves_each_part_in_parallel():
 
     assert len(parts) == 2
     assert [c["query"] for c in docs.calls] == parts
-    # Mỗi phần chỉ chấm nửa top-N để latency không nhân N
-    assert all(c["rerank_top_n"] == 4 for c in docs.calls)
+    # Mỗi phần chấm **đủ** top-N (KB-5.8: trước đây là `top_n // 2`, đo lại thấy tụt precision@k >5%)
+    assert all(c["rerank_top_n"] == 8 for c in docs.calls)
     # Gộp: giữ điểm cao nhất cho chunk trùng (kafka-1: 0.9 > 0.5), sort giảm dần
     assert [item["chunk_id"] for item in hits] == ["rabbit-1", "kafka-1"]
     assert hits[1]["score"] == 0.9

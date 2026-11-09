@@ -29,6 +29,7 @@ from app.core.errors import (
     error_body,
     http_status_error,
 )
+from app.core.logging_setup import configure_logging
 from app.core.middleware import RequestIDMiddleware, get_request_id
 from app.core.sse import SSE_HEADERS, sse_event_stream
 from app.services.document_service import DocumentService
@@ -66,6 +67,9 @@ async def lifespan(application: FastAPI):
 
     try:
         setting = get_settings()
+        # KB-5.9 (trả TD-18): gắn handler cho logger `app.*` TRƯỚC khi service khởi tạo ⇒ log INFO hiện ra.
+        log_level = configure_logging(getattr(setting, "log_level", "INFO"))
+        logging.getLogger(__name__).info("logging configured: level=%s", logging.getLevelName(log_level))
         # `uptime_seconds` của /health tính từ đây (KB-3.4)
         health_service = HealthService(setting)
         # Initialize services

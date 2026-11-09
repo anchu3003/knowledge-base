@@ -96,12 +96,18 @@ class HealthService:
         return {"ok": True, "detail": f"model={self.settings.openai_model}"}
 
     def _check_prompt_file(self) -> Dict[str, Any]:
+        """Kiểm prompt template (KB-5.9 — trả TD-19).
+
+        `ChatService._create_system_prompt()` có **prompt fallback** dựng sẵn trong code ⇒ thiếu file **không**
+        làm chat hỏng. Trước KB-5.9, `/ready` trả `ok: false` khi thiếu file ⇒ health đỏ sai và container bị
+        coi là "chưa sẵn sàng" dù vẫn trả lời được.
+        """
         raw_path = getattr(self.settings, "system_prompt_path", None)
         if not raw_path:
-            return {"ok": False, "detail": "SYSTEM_PROMPT_PATH is not set"}
+            return {"ok": True, "detail": "SYSTEM_PROMPT_PATH is not set — dùng prompt fallback trong code"}
         path = Path(raw_path)
         if not path.is_file():
-            return {"ok": False, "detail": f"prompt file not found: {path.name}"}
+            return {"ok": True, "detail": f"prompt file not found: {path.name} — dùng prompt fallback trong code"}
         return {"ok": True, "detail": f"prompt file: {path.name}"}
 
     def _check_collection(self, document_service: Any) -> Dict[str, Any]:

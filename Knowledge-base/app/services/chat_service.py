@@ -136,7 +136,9 @@ class ChatService:
             )
             return docs, []
 
-        per_part_top_n = max(2, self.settings.rerank_top_n // 2)
+        # KB-5.8 (TD-29): mỗi phần chấm **đủ** `RERANK_TOP_N` ứng viên. Trước đây lấy `top_n // 2` để tiết kiệm
+        # latency, nhưng đo lại cho thấy precision@k tụt >5% khi `top_n` nhỏ (test 20 câu vàng).
+        per_part_top_n = max(2, self.settings.rerank_top_n)
         results = await asyncio.gather(
             *[
                 self.document_service.search_similar_documents(
