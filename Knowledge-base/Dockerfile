@@ -1,3 +1,11 @@
+# syntax=docker/dockerfile:1
+## KB-5.10 (trả TD-9): image từng **16,5 GB** vì 3 lý do đo được:
+##   1. `torch` bản mặc định của PyPI = **CUDA** (`2.15.0+cu132`) kéo theo 15 gói `nvidia-*` ≈ **3,0 GB**
+##   2. `/wheels` (3,0 GB) bị `COPY --from=builder` vào image cuối rồi **không xoá**
+##   3. các layer pip/apt còn sót
+## Cách sửa: cài **torch CPU** (`--index-url .../whl/cpu`) TRƯỚC, và dùng **bind mount** cho `/wheels`
+## (wheels chỉ tồn tại trong lúc `RUN`, không thành layer) ⇒ image còn ~vài GB.
+
 ## ---------- Builder stage: build wheels to speed up installs ----------
 FROM python:3.13-slim AS builder
 
@@ -9,9 +17,18 @@ RUN apt-get update \
 
 COPY requirements.txt /tmp/requirements.txt
 
-# Pre-build wheels for all dependencies to reuse across layers
+# KB-5.10: CPU-only torch. `--extra-index-url` vẫn để pip thấy CPU build khi resolve dependency của
+# `sentence-transformers`, nhưng PEP 440 xếp `2.x.y+cpu` **thấp hơn** `2.x.y` (bản CUDA trên PyPI) ⇒ pip
+# vẫn có thể chọn bản CUDA. Vì vậy sau khi build xong phải **xoá wheel torch không phải `+cpu`** khỏi
+# /wheels (nếu không, stage cuối `--no-index --find-links` sẽ chọn bản CUDA).
+ARG TORCH_CPU_INDEX=https://download.pytorch.org/whl/cpu
+
 RUN pip install --upgrade pip setuptools wheel \
-    && pip wheel --no-cache-dir -r /tmp/requirements.txt -w /wheels
+    && pip wheel --no-cache-dir torch --index-url "${TORCH_CPU_INDEX}" -w /wheels \
+    && pip wheel --no-cache-dir -r /tmp/requirements.txt -w /wheels --extra-index-url "${TORCH_CPU_INDEX}" \
+    && ls /wheels | grep -E '^torch-2' | grep -v '+cpu' | sed 's|^|/wheels/|' | xargs -r rm -f \
+    && ls /wheels | grep -E '^nvidia' | sed 's|^|/wheels/|' | xargs -r rm -f \
+    && echo '--- torch wheels giữ lại ---' && ls /wheels | grep -E '^torch-'
 
 
 ## ---------- Final stage: minimal runtime image ----------
@@ -38,10 +55,15 @@ RUN apt-get update \
        libstdc++6 libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first, then install deps (prefer prebuilt wheels)
 COPY requirements.txt /tmp/requirements.txt
-COPY --from=builder /wheels /wheels
-RUN pip install --no-index --find-links=/wheels -r /tmp/requirements.txt \
+
+# KB-5.10: cài torch **CPU** trước (bản `+cpu` không kéo `nvidia-*`). Sau bước này `pip install -r` thấy
+# `torch>=…` đã thoả nên **không** tải lại bản CUDA.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# KB-5.10: `--mount=type=bind` ⇒ /wheels **không** vào layer (trước đây `COPY --from=builder` để lại 3,0 GB).
+RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels \
+    pip install --no-index --find-links=/wheels -r /tmp/requirements.txt \
     || pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Copy application source
