@@ -6,9 +6,9 @@ import {
     DocumentsPanelContent,
     canConfirmClear,
     failedChecks,
-    isRefreshSafe,
+    isSyncSafe,
     readyTone,
-    refreshBlockedReason,
+    syncBlockedReason,
 } from '@/components/documents-panel';
 
 const baseProps = {
@@ -20,15 +20,14 @@ const baseProps = {
     actionError: null,
     busy: null,
     pending: null,
-    refreshResult: null,
+    syncResult: null,
     cleared: false,
     clearInput: '',
     onReload: vi.fn(),
     onClose: vi.fn(),
-    onAskRefresh: vi.fn(),
+    onSync: vi.fn(),
     onAskClear: vi.fn(),
     onCancel: vi.fn(),
-    onConfirmRefresh: vi.fn(),
     onConfirmClear: vi.fn(),
     onClearInputChange: vi.fn(),
 } as const;
@@ -90,25 +89,42 @@ describe('DocumentsPanelContent (KB-4.5)', () => {
         expect(onConfirmClear).toHaveBeenCalledOnce();
     });
 
-    it('refresh xong ⇒ hiện processed_files/total_chunks', () => {
-        render(<DocumentsPanelContent {...baseProps} refreshResult={{
-            success: true, message: 'Successfully refreshed 7 documents',
-            processed_files: 7, total_chunks: 128,
+    it('đồng bộ xong ⇒ hiện số mới/cập nhật/xoá + thời gian (KB-5.1)', () => {
+        render(<DocumentsPanelContent {...baseProps} syncResult={{
+            success: true,
+            message: '+1 mới, ~1 cập nhật, -1 xoá',
+            added: ['moi.md'],
+            updated: ['sua.md'],
+            removed: ['da-xoa.md'],
+            skipped: [{path: '/docs/big.md', reason: 'too_large: 12.0MB > 10MB'}],
+            unchanged: 4,
+            total_chunks: 6,
+            removed_chunks: 3,
+            elapsed_ms: 1234,
         }}/>);
 
-        expect(screen.getByText(/7 file/)).toBeInTheDocument();
-        expect(screen.getByText(/128 chunk/)).toBeInTheDocument();
+        const result = screen.getByTestId('sync-result');
+        expect(result).toHaveTextContent('1 mới');
+        expect(result).toHaveTextContent('1 cập nhật');
+        expect(result).toHaveTextContent('1 xoá');
+        expect(result).toHaveTextContent('4 không đổi');
+        expect(result).toHaveTextContent('1 bỏ qua');
+        expect(result).toHaveTextContent('6 chunk mới');
+        expect(result).toHaveTextContent('1.2s');
+        // file bị bỏ qua phải nêu lý do (để user biết vì sao không thấy tài liệu đó)
+        expect(result).toHaveTextContent('big.md');
+        expect(result).toHaveTextContent('too_large');
     });
 
-    it('bấm "Refresh index" / "Clear" ⇒ gọi callback tương ứng', async () => {
-        const onAskRefresh = vi.fn();
+    it('bấm "Đồng bộ file mới" / "Clear" ⇒ gọi callback tương ứng', async () => {
+        const onSync = vi.fn();
         const onAskClear = vi.fn();
-        render(<DocumentsPanelContent {...baseProps} onAskRefresh={onAskRefresh} onAskClear={onAskClear}/>);
+        render(<DocumentsPanelContent {...baseProps} onSync={onSync} onAskClear={onAskClear}/>);
 
-        await userEvent.click(screen.getByRole('button', {name: /Refresh index/}));
+        await userEvent.click(screen.getByRole('button', {name: /Đồng bộ file mới/}));
         await userEvent.click(screen.getByRole('button', {name: /^Clear$/}));
 
-        expect(onAskRefresh).toHaveBeenCalledOnce();
+        expect(onSync).toHaveBeenCalledOnce();
         expect(onAskClear).toHaveBeenCalledOnce();
     });
 });
@@ -144,13 +160,13 @@ describe('helpers của DocumentsPanel', () => {
 // KB-4.10: Refresh phải bị chặn khi backend không thấy folder tài liệu (nếu không sẽ xoá index vô ích)
 describe('Refresh bị chặn khi folder tài liệu rỗng (KB-4.10)', () => {
     it('folder không tồn tại ⇒ nút Refresh disabled + hiện lý do', () => {
-        const onAskRefresh = vi.fn();
+        const onSync = vi.fn();
         render(<DocumentsPanelContent {...baseProps}
                                      folder={{...baseProps.folder, exists: false, supported_files_count: 0}}
-                                     onAskRefresh={onAskRefresh}/>);
+                                     onSync={onSync}/>);
 
-        const refresh = screen.getByRole('button', {name: /Refresh index/});
-        expect(refresh).toBeDisabled();
+        const syncButton = screen.getByRole('button', {name: /Đồng bộ file mới/});
+        expect(syncButton).toBeDisabled();
         expect(screen.getByRole('status')).toHaveTextContent(/không thấy folder tài liệu/i);
     });
 
@@ -158,28 +174,28 @@ describe('Refresh bị chặn khi folder tài liệu rỗng (KB-4.10)', () => {
         render(<DocumentsPanelContent {...baseProps}
                                      folder={{...baseProps.folder, exists: true, supported_files_count: 0}}/>);
 
-        expect(screen.getByRole('button', {name: /Refresh index/})).toBeDisabled();
+        expect(screen.getByRole('button', {name: /Đồng bộ file mới/})).toBeDisabled();
         expect(screen.getByRole('status')).toHaveTextContent(/không có file hỗ trợ/i);
     });
 
     it('folder có file hỗ trợ ⇒ Refresh bật bình thường', async () => {
-        const onAskRefresh = vi.fn();
+        const onSync = vi.fn();
         render(<DocumentsPanelContent {...baseProps}
                                      folder={{...baseProps.folder, exists: true, supported_files_count: 6}}
-                                     onAskRefresh={onAskRefresh}/>);
+                                     onSync={onSync}/>);
 
-        const refresh = screen.getByRole('button', {name: /Refresh index/});
-        expect(refresh).toBeEnabled();
+        const syncButton = screen.getByRole('button', {name: /Đồng bộ file mới/});
+        expect(syncButton).toBeEnabled();
         expect(screen.queryByRole('status')).toBeNull();
-        await userEvent.click(refresh);
-        expect(onAskRefresh).toHaveBeenCalledOnce();
+        await userEvent.click(syncButton);
+        expect(onSync).toHaveBeenCalledOnce();
     });
 
-    it('helpers: isRefreshSafe / refreshBlockedReason', () => {
-        expect(isRefreshSafe(null)).toBe(false);
-        expect(isRefreshSafe({exists: false} as never)).toBe(false);
-        expect(isRefreshSafe({exists: true, supported_files_count: 0} as never)).toBe(false);
-        expect(isRefreshSafe({exists: true, supported_files_count: 3} as never)).toBe(true);
-        expect(refreshBlockedReason({exists: true, supported_files_count: 3} as never)).toBeNull();
+    it('helpers: isSyncSafe / syncBlockedReason', () => {
+        expect(isSyncSafe(null)).toBe(false);
+        expect(isSyncSafe({exists: false} as never)).toBe(false);
+        expect(isSyncSafe({exists: true, supported_files_count: 0} as never)).toBe(false);
+        expect(isSyncSafe({exists: true, supported_files_count: 3} as never)).toBe(true);
+        expect(syncBlockedReason({exists: true, supported_files_count: 3} as never)).toBeNull();
     });
 });

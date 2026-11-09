@@ -9,7 +9,7 @@ import {
     getHealth,
     getReady,
     postChat,
-    refreshDocuments,
+    syncDocuments,
     streamChat,
 } from '@/lib/api';
 
@@ -141,7 +141,7 @@ describe('documents & health (KB-4.5)', () => {
             error: {code: 'document_store_error', message: 'refresh failed', request_id: 'req-5'},
         }));
 
-        await expect(refreshDocuments()).rejects.toMatchObject({
+        await expect(syncDocuments()).rejects.toMatchObject({
             code: 'document_store_error',
             requestId: 'req-5',
         });

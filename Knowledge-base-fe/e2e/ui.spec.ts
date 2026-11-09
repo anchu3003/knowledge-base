@@ -416,3 +416,71 @@ test.describe('Pha truy hồi & answer rỗng (KB-4.11)', () => {
         }
     });
 });
+test.describe('Đồng bộ tài liệu (KB-5.1)', () => {
+    test('bấm "Đồng bộ file mới" ⇒ hiện kết quả, không còn nút Refresh toàn bộ', async ({page}) => {
+        // Stub các endpoint đọc trạng thái để panel mở được (không phụ thuộc BE thật)
+        await page.route('**/documents/status', (route) =>
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({collection_name: 'documents', document_count: 603, status: 'healthy'}),
+            }),
+        );
+        await page.route('**/documents/folder-info', (route) =>
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    folder_path: '/app/Interview',
+                    exists: true,
+                    total_files: 67,
+                    supported_files_count: 56,
+                }),
+            }),
+        );
+        await page.route('**/ready', (route) =>
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({status: 'ok', checks: {collection: {ok: true, detail: 'ok'}}}),
+            }),
+        );
+        await page.route('**/documents/sync', (route) =>
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    success: true,
+                    message: '+1 mới, ~0 cập nhật, -0 xoá',
+                    added: ['ghi-chu-moi.md'],
+                    updated: [],
+                    removed: [],
+                    skipped: [{path: 'Interview/Messaging/Kafka.md', reason: 'empty_file: 0 bytes'}],
+                    unchanged: 46,
+                    total_chunks: 2,
+                    removed_chunks: 0,
+                    elapsed_ms: 1233,
+                    details: [],
+                }),
+            }),
+        );
+
+        await page.goto('/');
+        await page.getByRole('button', {name: 'Kho tài liệu'}).click();
+        const sheet = page.locator('[data-slot="sheet-content"]');
+        await expect(sheet).toBeVisible();
+
+        // Q3 = B: nút Refresh toàn bộ đã bị bỏ khỏi UI
+        await expect(sheet.getByRole('button', {name: /Refresh/i})).toHaveCount(0);
+
+        await sheet.getByRole('button', {name: /Đồng bộ file mới/}).click();
+
+        const result = page.getByTestId('sync-result');
+        await expect(result).toBeVisible({timeout: 10_000});
+        await expect(result).toContainText('1 mới');
+        await expect(result).toContainText('2 chunk mới');
+        await expect(result).toContainText('1.2s');
+        await expect(result).toContainText('Kafka.md');
+        await page.screenshot({path: 'test-results/shot-12-sync-result.png'});
+    });
+});
