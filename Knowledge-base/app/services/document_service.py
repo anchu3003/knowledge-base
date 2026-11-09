@@ -440,8 +440,16 @@ class DocumentService:
             hits = dedupe_hits(hits, self.settings.dedup_jaccard_threshold)
         return cap_per_file(hits, self.settings.max_chunks_per_file)
 
-    async def search_similar_documents(self, query: str, k: int = None) -> List[Dict[str, Any]]:
+    async def search_similar_documents(
+            self,
+            query: str,
+            k: int = None,
+            rerank_top_n: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """Search for similar documents using dense, sparse and optional re-ranking.
+
+        `rerank_top_n` (KB-5.4): override số ứng viên đưa vào cross-encoder — dùng cho **multi-query**
+        (mỗi phần chỉ cần chấm ít ứng viên hơn để không nhân latency lên gấp N).
 
         Returns list of dicts: {chunk_id, content, metadata, score, rank}
         (dedup + cap/file đã áp dụng — xem `_postprocess_hits`)
@@ -568,7 +576,8 @@ class DocumentService:
 
         # Optional cross-encoder re-ranking on top-N
         if self.settings.enable_rerank and candidates:
-            top_n = min(self.settings.rerank_top_n, len(candidates))
+            effective_top_n = rerank_top_n if rerank_top_n is not None else self.settings.rerank_top_n
+            top_n = min(max(1, effective_top_n), len(candidates))
             pairs = [(query, c["content"]) for c in candidates[:top_n]]
 
             # KB-5.3: tra cache trước — cùng câu hỏi + index chưa đổi ⇒ bỏ qua 8–13 s rerank.

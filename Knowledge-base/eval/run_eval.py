@@ -154,6 +154,10 @@ def prepare_env(args: argparse.Namespace) -> None:
         os.environ["ENABLE_RERANK"] = "true"
     elif args.rerank == "off":
         os.environ["ENABLE_RERANK"] = "false"
+    if getattr(args, "multi_query", "env") == "on":
+        os.environ["MULTI_QUERY_ENABLED"] = "true"
+    elif getattr(args, "multi_query", "env") == "off":
+        os.environ["MULTI_QUERY_ENABLED"] = "false"
     if args.k:
         os.environ["RETRIEVAL_K"] = str(args.k)
 
@@ -176,11 +180,18 @@ def build_services():
 # -----------------------------
 # Runners
 # -----------------------------
-async def run_retrieval(settings, service, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+async def run_retrieval(settings, service, items: List[Dict[str, Any]], retriever=None) -> List[Dict[str, Any]]:
+    """`retriever` (KB-5.4): nếu có, dùng `ChatService.retrieve` ⇒ đo được multi-query.
+
+    Truyền vào khi `MULTI_QUERY_ENABLED=true`; không truyền ⇒ gọi thẳng DocumentService (hành vi cũ).
+    """
     rows: List[Dict[str, Any]] = []
     for item in items:
         t0 = time.perf_counter()
-        hits = await service.search_similar_documents(query=item["question"], k=settings.retrieval_k)
+        if retriever is not None:
+            hits = await retriever(item["question"])
+        else:
+            hits = await service.search_similar_documents(query=item["question"], k=settings.retrieval_k)
         latency = time.perf_counter() - t0
         hit, rank = hit_and_rank(hits, item["expected_files"])
         row = {
@@ -302,6 +313,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--tag", default="run", help="nhãn cho snapshot JSON (vd baseline)")
     parser.add_argument("--limit", type=int, default=None, help="chỉ chạy N câu đầu (để thử)")
     parser.add_argument("--k", type=int, default=None, help="override RETRIEVAL_K")
+    parser.add_argument("--multi-query", choices=["env", "on", "off"], default="env", dest="multi_query",
+                        help="override MULTI_QUERY_ENABLED (KB-5.4: câu hỏi nhiều ý ⇒ retrieve từng phần)")
     parser.add_argument("--rerank", choices=["env", "on", "off"], default="env",
                         help="override ENABLE_RERANK (env = giữ nguyên theo .env)")
     parser.add_argument("--build-index", action="store_true",
@@ -335,6 +348,8 @@ async def main_async(args: argparse.Namespace) -> int:
         "enable_hybrid": settings.enable_hybrid,
         "hybrid_alpha": settings.hybrid_alpha,
         "enable_rerank": settings.enable_rerank,
+        "rerank_top_n": settings.rerank_top_n,
+        "multi_query_enabled": settings.multi_query_enabled,
         "rerank_model": settings.rerank_model if settings.enable_rerank else "(off)",
         "similarity_threshold": settings.similarity_threshold,
         "chunk_size": settings.chunk_size,
@@ -345,8 +360,15 @@ async def main_async(args: argparse.Namespace) -> int:
     print(f"→ Mode={args.mode} · {len(items)} câu · k={settings.retrieval_k} · "
           f"rerank={settings.enable_rerank} · index={meta['collection_count']} chunks\n")
 
+    retriever = None
+    if args.mode == "retrieval" and settings.multi_query_enabled:
+        # KB-5.4: multi-query nằm ở ChatService ⇒ eval phải đi qua đúng đường đó mới đo được
+        from app.services.chat_service import ChatService
+
+        retriever = ChatService(settings, service).retrieve
+
     if args.mode == "retrieval":
-        rows = await run_retrieval(settings, service, items)
+        rows = await run_retrieval(settings, service, items, retriever=retriever)
         summary = summarize_retrieval(rows)
     else:
         rows = await run_full(settings, service, items, pause_seconds=args.sleep)
