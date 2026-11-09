@@ -13,7 +13,7 @@ import type {
     ChatRequest,
     ChatResponse,
     DocumentStatus,
-    DocumentsRefreshResult,
+    DocumentsSyncResult,
     FolderInfo,
     HealthStatus,
     ReadinessStatus,
@@ -274,16 +274,18 @@ export async function getFolderInfo(): Promise<FolderInfo> {
 }
 
 /**
- * `POST /documents/refresh` — clear index rồi re-index toàn bộ folder.
+ * `POST /documents/sync` — index **tăng dần** từ folder (KB-5.1).
  *
- * ⚠️ Request **rất dài** ⇒ dùng timeout riêng (`REFRESH_TIMEOUT_MS`). Nếu BE restart giữa chừng thì FE chỉ
- * thấy `network_error`/`request_timeout` — không có cách phân biệt, chấp nhận (ghi trong Learning note).
+ * Không clear index ⇒ chat vẫn trả lời được trong lúc chạy. Vẫn dùng timeout dài
+ * (`REFRESH_TIMEOUT_MS`) vì lần đầu (index chưa có `file_hash`) có thể phải embed nhiều file.
+ *
+ * Nút **Refresh toàn bộ** đã bỏ khỏi UI (Q&A Q3 = B); endpoint `POST /documents/refresh` vẫn ở BE cho cứu hộ bằng curl.
  */
-export async function refreshDocuments(): Promise<DocumentsRefreshResult> {
+export async function syncDocuments(): Promise<DocumentsSyncResult> {
     const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
         ? AbortSignal.timeout(REFRESH_TIMEOUT_MS)
         : undefined;
-    return apiFetch<DocumentsRefreshResult>('/documents/refresh', {
+    return apiFetch<DocumentsSyncResult>('/documents/sync', {
         method: 'POST',
         signal,
     });

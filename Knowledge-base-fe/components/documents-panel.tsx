@@ -5,7 +5,8 @@
  *
  * - Chỉ fetch khi mở (giả định (a) của ticket) — không poll.
  * - `/documents/status` (số chunk) + `/documents/folder-info` (đếm file trên đĩa) + `/ready` (provider/config).
- * - **Refresh index**: clear rồi re-index toàn bộ folder — request rất dài (TD-14) ⇒ confirm + timeout riêng.
+ * - **Đồng bộ file mới** (KB-5.1): index tăng dần — chỉ file mới/đổi, xoá chunk của file đã bỏ. Không clear
+ *   index ⇒ chat vẫn dùng được trong lúc sync. Nút **Refresh toàn bộ** đã bỏ (Q&A Q3 = B).
  * - **Clear**: xoá sạch index ⇒ Q&A KB-4.5 Q2 chốt: phải **gõ `CLEAR`** mới bấm được.
  * - Lỗi hiện theo contract KB-4.1 (`describeApiError`: code + message + hint + request_id).
  *
@@ -18,12 +19,12 @@ import {
     getDocumentsStatus,
     getFolderInfo,
     getReady,
-    refreshDocuments,
+    syncDocuments,
 } from '@/lib/api';
 import {describeApiError, type ApiErrorView} from '@/lib/errors';
 import type {
     DocumentStatus,
-    DocumentsRefreshResult,
+    DocumentsSyncResult,
     FolderInfo,
     ReadinessStatus,
 } from '@/lib/types';
@@ -84,23 +85,24 @@ export function canConfirmClear(input: string): boolean {
 }
 
 /**
- * Refresh = clear + re-index. Nếu backend không thấy folder tài liệu (folder không tồn tại hoặc 0 file hỗ trợ)
- * thì refresh sẽ **xoá index mà không index lại được** ⇒ phải chặn ở UI (KB-4.10).
+ * Sync đối chiếu folder với index ⇒ nếu backend **không thấy folder** (không tồn tại hoặc 0 file hỗ trợ) thì
+ * mọi file đang index sẽ bị coi là "đã xoá" và **bị xoá khỏi vector store** ⇒ phải chặn ở UI
+ * (cùng lý do với KB-4.10, giờ áp cho sync).
  */
-export function isRefreshSafe(folder?: FolderInfo | null): boolean {
+export function isSyncSafe(folder?: FolderInfo | null): boolean {
     if (!folder) return false;
     if (folder.exists === false) return false;
     return (folder.supported_files_count ?? 0) > 0;
 }
 
-/** Lý do Refresh bị chặn (hiện cạnh nút) — `null` khi refresh an toàn. */
-export function refreshBlockedReason(folder?: FolderInfo | null): string | null {
+/** Lý do nút Đồng bộ bị chặn (hiện cạnh nút) — `null` khi an toàn. */
+export function syncBlockedReason(folder?: FolderInfo | null): string | null {
     if (!folder) return 'Chưa đọc được thông tin folder tài liệu.';
     if (folder.exists === false) {
-        return `Backend không thấy folder tài liệu (${folder.folder_path}) — refresh sẽ xoá index mà không index lại được.`;
+        return `Backend không thấy folder tài liệu (${folder.folder_path}) — đồng bộ sẽ coi mọi tài liệu đã index là "đã xoá" và xoá khỏi index.`;
     }
     if ((folder.supported_files_count ?? 0) === 0) {
-        return 'Folder tài liệu không có file hỗ trợ nào — refresh sẽ xoá index mà không index lại được.';
+        return 'Folder tài liệu không có file hỗ trợ nào — đồng bộ sẽ xoá toàn bộ index hiện có.';
     }
     return null;
 }
@@ -116,21 +118,20 @@ export interface DocumentsPanelContentProps {
     loading: boolean;
     /** Lỗi khi tải trạng thái (banner KB-4.1). */
     loadError: ApiErrorView | null;
-    /** Lỗi của Refresh/Clear. */
+    /** Lỗi của Đồng bộ/Clear. */
     actionError: ApiErrorView | null;
     /** Hành động đang chạy. */
-    busy: 'refresh' | 'clear' | null;
-    /** Hành động đang chờ xác nhận. */
-    pending: 'refresh' | 'clear' | null;
-    refreshResult: DocumentsRefreshResult | null;
+    busy: 'sync' | 'clear' | null;
+    /** Hành động đang chờ xác nhận (chỉ Clear cần — sync không phá huỷ). */
+    pending: 'clear' | null;
+    syncResult: DocumentsSyncResult | null;
     cleared: boolean;
     clearInput: string;
     onReload: () => void;
     onClose: () => void;
-    onAskRefresh: () => void;
+    onSync: () => void;
     onAskClear: () => void;
     onCancel: () => void;
-    onConfirmRefresh: () => void;
     onConfirmClear: () => void;
     onClearInputChange: (value: string) => void;
 }
@@ -170,15 +171,14 @@ export function DocumentsPanelContent({
                                            actionError,
                                            busy,
                                            pending,
-                                           refreshResult,
+                                           syncResult,
                                            cleared,
                                            clearInput,
                                            onReload,
                                            onClose,
-                                           onAskRefresh,
+                                           onSync,
                                            onAskClear,
                                            onCancel,
-                                           onConfirmRefresh,
                                            onConfirmClear,
                                            onClearInputChange,
                                        }: DocumentsPanelContentProps) {
@@ -186,7 +186,7 @@ export function DocumentsPanelContent({
     const failures = failedChecks(ready);
     const disabled = busy !== null;
     // KB-4.10: chặn Refresh khi backend không thấy folder tài liệu (sẽ xoá index mà không index lại được)
-    const refreshBlocked = refreshBlockedReason(folder);
+    const syncBlocked = syncBlockedReason(folder);
 
     return (
         <div className="flex h-full flex-col">
@@ -265,11 +265,35 @@ export function DocumentsPanelContent({
 
                     {actionError && <ErrorBox view={actionError}/>}
 
-                    {refreshResult && (
-                        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-200">
-                            ✓ {refreshResult.message} — {refreshResult.processed_files} file ·{' '}
-                            {refreshResult.total_chunks} chunk
-                        </p>
+                    {syncResult && (
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-900 dark:border-emerald-800/60 dark:bg-emerald-900/20 dark:text-emerald-200"
+                             data-testid="sync-result">
+                            <p className="font-semibold">
+                                ✓ {syncResult.message}
+                            </p>
+                            <p className="mt-1">
+                                {syncResult.added.length} mới · {syncResult.updated.length} cập nhật ·{' '}
+                                {syncResult.removed.length} xoá · {syncResult.unchanged} không đổi
+                                {syncResult.skipped.length > 0 && ` · ${syncResult.skipped.length} bỏ qua`}
+                                {' '}· {syncResult.total_chunks} chunk mới · {(syncResult.elapsed_ms / 1000).toFixed(1)}s
+                            </p>
+                            {syncResult.skipped.length > 0 && (
+                                <ul className="mt-1 list-disc pl-4">
+                                    {syncResult.skipped.slice(0, 3).map((item) => (
+                                        <li key={item.path} className="font-mono text-[11px]">
+                                            {item.path.split(/[\\/]/).pop()}: {item.reason}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                            {syncResult.details && syncResult.details.length > 0 && (
+                                <ul className="mt-1 list-disc pl-4">
+                                    {syncResult.details.slice(0, 3).map((detail) => (
+                                        <li key={detail} className="font-mono text-[11px]">{detail}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
                     )}
 
                     {cleared && (
@@ -278,25 +302,6 @@ export function DocumentsPanelContent({
                         </p>
                     )}
 
-
-                    {/* ----- Hành động: Refresh index (confirm thường) ----- */}
-                    {pending === 'refresh' && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
-                            <p className="font-semibold">Refresh sẽ XOÁ index hiện tại rồi re-index toàn bộ folder.</p>
-                            <p className="mt-1">
-                                Với kho tài liệu lớn có thể mất hàng chục phút; trong lúc chạy, chat vẫn dùng được
-                                nhưng kết quả retrieval có thể thiếu.
-                            </p>
-                            <div className="mt-2 flex gap-2">
-                                <Button size="sm" onClick={onConfirmRefresh} disabled={disabled}>
-                                    {busy === 'refresh' ? 'Đang re-index…' : 'Xác nhận refresh'}
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={onCancel} disabled={disabled}>
-                                    Huỷ
-                                </Button>
-                            </div>
-                        </div>
-                    )}
 
                     {/* ----- Hành động: Clear (phải gõ CLEAR) ----- */}
                     {pending === 'clear' && (
@@ -327,19 +332,19 @@ export function DocumentsPanelContent({
                 </div>
 
                 <footer className="flex flex-col gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-700">
-                    {refreshBlocked && (
+                    {syncBlocked && (
                         <p role="status"
                            className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-200">
-                            ⚠ {refreshBlocked}
+                            ⚠ {syncBlocked}
                         </p>
                     )}
                     <div className="flex items-center justify-end gap-2">
-                        <Button size="sm" variant="ghost" onClick={onAskRefresh}
-                                disabled={disabled || pending !== null || refreshBlocked !== null}
-                                title={refreshBlocked ?? 'Clear index rồi re-index toàn bộ folder tài liệu'}
+                        <Button size="sm" onClick={onSync}
+                                disabled={disabled || pending !== null || syncBlocked !== null}
+                                title={syncBlocked ?? 'Index các file mới/đã sửa trong folder tài liệu (không xoá index cũ)'}
                                 className="gap-1">
-                            <RefreshCw className="h-3.5 w-3.5"/>
-                            Refresh index
+                            <RefreshCw className={`h-3.5 w-3.5 ${busy === 'sync' ? 'animate-spin' : ''}`}/>
+                            {busy === 'sync' ? 'Đang đồng bộ…' : 'Đồng bộ file mới'}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={onAskClear}
                                 disabled={disabled || pending !== null}
@@ -370,9 +375,9 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState<ApiErrorView | null>(null);
     const [actionError, setActionError] = useState<ApiErrorView | null>(null);
-    const [busy, setBusy] = useState<'refresh' | 'clear' | null>(null);
-    const [pending, setPending] = useState<'refresh' | 'clear' | null>(null);
-    const [refreshResult, setRefreshResult] = useState<DocumentsRefreshResult | null>(null);
+    const [busy, setBusy] = useState<'sync' | 'clear' | null>(null);
+    const [pending, setPending] = useState<'clear' | null>(null);
+    const [syncResult, setSyncResult] = useState<DocumentsSyncResult | null>(null);
     const [cleared, setCleared] = useState(false);
     const [clearInput, setClearInput] = useState('');
 
@@ -407,15 +412,15 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
 
     // Esc + focus trap + aria-modal: Radix `Sheet` (Dialog) lo, không cần effect thủ công (KB-4.8)
 
-    const handleConfirmRefresh = async () => {
-        setBusy('refresh');
+    /** Đồng bộ = index tăng dần (KB-5.1). Không phá huỷ ⇒ không cần confirm như Refresh cũ. */
+    const handleSync = async () => {
+        setBusy('sync');
         setActionError(null);
-        setRefreshResult(null);
+        setSyncResult(null);
         setCleared(false);
         try {
-            const result = await refreshDocuments();
-            setRefreshResult(result);
-            setPending(null);
+            const result = await syncDocuments();
+            setSyncResult(result);
             await load();
         } catch (error) {
             setActionError(describeApiError(error));
@@ -427,7 +432,7 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
     const handleConfirmClear = async () => {
         setBusy('clear');
         setActionError(null);
-        setRefreshResult(null);
+        setSyncResult(null);
         setCleared(false);
         try {
             await clearDocuments();
@@ -457,20 +462,15 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
                     actionError={actionError}
                     busy={busy}
                     pending={pending}
-                    refreshResult={refreshResult}
+                    syncResult={syncResult}
                     cleared={cleared}
                     clearInput={clearInput}
                     onReload={() => void load()}
                     onClose={onClose}
-                onAskRefresh={() => {
-                    setActionError(null);
-                    setRefreshResult(null);
-                    setCleared(false);
-                    setPending('refresh');
-                }}
+                onSync={() => void handleSync()}
                 onAskClear={() => {
                     setActionError(null);
-                    setRefreshResult(null);
+                    setSyncResult(null);
                     setCleared(false);
                     setClearInput('');
                     setPending('clear');
@@ -479,7 +479,6 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
                     setPending(null);
                     setClearInput('');
                 }}
-                onConfirmRefresh={() => void handleConfirmRefresh()}
                 onConfirmClear={() => void handleConfirmClear()}
                 onClearInputChange={setClearInput}
                 />

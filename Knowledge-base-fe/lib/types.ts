@@ -168,11 +168,19 @@ export interface HealthStatus {
     uptime_seconds: number
 }
 
-/** `POST /documents/refresh` — re-index toàn bộ folder tài liệu. */
-export interface DocumentsRefreshResult {
+/** `POST /documents/sync` — index **tăng dần** (KB-5.1): chỉ file mới/đổi, xoá chunk của file đã bỏ. */
+export interface DocumentsSyncResult {
     success: boolean
     message: string
-    processed_files: number
+    /** Tên file (không phải path) — đủ để hiện cho người dùng. */
+    added: string[]
+    updated: string[]
+    removed: string[]
+    /** File bị bỏ qua vì quá size / không đọc được. */
+    skipped: Array<{ path: string; reason: string }>
+    unchanged: number
     total_chunks: number
-    details?: Array<Record<string, unknown>>
+    removed_chunks: number
+    elapsed_ms: number
+    details?: string[]
 }
