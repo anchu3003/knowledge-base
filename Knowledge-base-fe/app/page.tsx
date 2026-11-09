@@ -20,6 +20,7 @@ import {
 } from '@/lib/chat-store';
 import {ApiError, STREAMING_ENABLED, StreamAbortedError, postChat, streamChat} from '@/lib/api';
 import {describeApiError, type ApiErrorView} from '@/lib/errors';
+import {phaseOf} from '@/lib/stream-phase';
 import type {ChatMessage} from '@/lib/types';
 
 /** Default khớp BE (`max_tokens=1000`). */
@@ -39,6 +40,10 @@ let messageSeq = 0;
  * Sinh id message trong **event handler**. Đặt ở module scope để rule `react-hooks/purity` không coi
  * `Date.now()` là impure trong thân component (compiler không phân biệt được handler vs render).
  */
+function nowMs(): number {
+    return Date.now();
+}
+
 function createMessageId(prefix: 'user' | 'assistant'): string {
     messageSeq += 1;
     return `${prefix}-${Date.now()}-${messageSeq}`;
@@ -76,6 +81,9 @@ export default function ChatPage() {
     const [temperature, setTemperature] = useState<number>(DEFAULT_TEMPERATURE);
     const [formError, setFormError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    // KB-4.11: pha truy hồi ↔ đang viết + đếm giây đã chờ
+    const [requestStartedAt, setRequestStartedAt] = useState<number | null>(null);
+    const [streamStarted, setStreamStarted] = useState(false);
     // KB-4.1: lỗi API hiển thị bằng banner (thay vì message giả trong khung chat)
     const [apiError, setApiError] = useState<ApiErrorView | null>(null);
     // Câu hỏi của lần gửi lỗi gần nhất — dùng cho nút "Thử lại" (không nhân đôi message user)
@@ -178,6 +186,9 @@ export default function ChatPage() {
     const submitQuestion = async (question: string, options: {appendUserMessage: boolean}) => {
         setApiError(null);
         setIsLoading(true);
+        // KB-4.11: mốc thời gian để hiện "đang truy hồi (ns)" trước khi BE gửi event `start`
+        setRequestStartedAt(nowMs());
+        setStreamStarted(false);
         ensureActiveSession();
 
         if (options.appendUserMessage) {
@@ -219,6 +230,9 @@ export default function ChatPage() {
                 }
             } finally {
                 setIsLoading(false);
+                // KB-4.11: kết thúc lượt ⇒ tắt khối trạng thái
+                setRequestStartedAt(null);
+                setStreamStarted(false);
             }
             return;
         }
@@ -245,6 +259,8 @@ export default function ChatPage() {
                     signal: controller.signal,
                     onEvent: (event) => {
                         if (event.type === 'start') {
+                            // KB-4.11: BE đã truy hồi xong ⇒ chuyển pha "đang viết"
+                            setStreamStarted(true);
                             if (event.conversation_id) setConversationId(event.conversation_id);
                             if (event.metadata) {
                                 updateAssistant(assistantId, (message) => ({...message, metadata: event.metadata}));
@@ -263,13 +279,22 @@ export default function ChatPage() {
                         if (event.type === 'end') {
                             if (event.conversation_id) setConversationId(event.conversation_id);
                             // `end.answer` là bản chốt của BE ⇒ dùng làm nguồn sự thật (không lệch do token rơi)
+                            const finalAnswer = (event.answer ?? '').trim();
+                            const emptyAnswer = finalAnswer.length === 0;
                             updateAssistant(assistantId, (message) => ({
                                 ...message,
                                 content: event.answer ?? message.content,
                                 sources: event.sources ?? message.sources,
                                 metadata: event.metadata ?? message.metadata,
                                 isStreaming: false,
+                                // KB-4.11: answer rỗng ⇒ hiện giải thích + Thử lại thay vì bubble trống
+                                emptyAnswer,
                             }));
+                            if (emptyAnswer) {
+                                // giữ câu trả lời rỗng có chủ đích (không dropIfEmpty) để user thấy lý do
+                                failed = true;
+                                setRetryText(question);
+                            }
                             return;
                         }
 
@@ -309,6 +334,9 @@ export default function ChatPage() {
         } finally {
             abortRef.current = null;
             setIsLoading(false);
+            // KB-4.11: kết thúc lượt ⇒ tắt khối trạng thái
+            setRequestStartedAt(null);
+            setStreamStarted(false);
         }
     };
 
@@ -367,6 +395,9 @@ export default function ChatPage() {
         });
     };
 
+    // KB-4.11: pha hiện tại — 'retrieving' (chưa có `start`) → 'writing' (đã có `start`)
+    const streamPhase = phaseOf({loading: isLoading, started: streamStarted, finished: false});
+
     // Model thật BE đã dùng (metadata của câu trả lời gần nhất) — không phải select giả
     const activeModel = [...messages]
         .reverse()
@@ -413,6 +444,9 @@ export default function ChatPage() {
                             isLoading={isLoading}
                             citationFocus={citationFocus}
                             onCitationClick={handleCitationClick}
+                            streamPhase={streamPhase}
+                            requestStartedAt={requestStartedAt}
+                            onRetry={retryText ? handleRetry : undefined}
                             bottomRef={scrollRef}
                         />
                     </ScrollArea>

@@ -1,3 +1,6 @@
+import {createServer} from 'node:http';
+import type {AddressInfo} from 'node:net';
+
 import {expect, test, type Page} from '@playwright/test';
 
 /**
@@ -5,6 +8,7 @@ import {expect, test, type Page} from '@playwright/test';
  *
  * Nguyên tắc: mỗi test **tự dựng state** qua `localStorage` (không gọi LLM ⇒ không tốn quota) rồi kiểm
  * thứ mà unit test không thấy được: layout, tràn ngang, focus trap, theme, persist sau reload.
+ * KB-4.11 thêm 2 test dùng **SSE server thật** (node:http stream từng frame) để thấy pha truy hồi → đang viết.
  */
 
 const STORE_KEY = 'kb.chat_sessions';
@@ -300,5 +304,115 @@ test.describe('Canh mép cột chat', () => {
         expect(Math.abs(sendBox!.height - composerBox!.height), 'nút gửi cùng chiều cao ô nhập').toBeLessThanOrEqual(2);
 
         await page.screenshot({path: 'test-results/shot-08-alignment.png'});
+    });
+});
+
+/**
+ * SSE server thật (node:http) để test pha `retrieving → writing`.
+ *
+ * `route.fulfill()` trả **toàn bộ** body một lần ⇒ UI nhảy thẳng từ "đang truy hồi" sang câu trả lời,
+ * không quan sát được pha "đang viết". Server này gửi từng frame cách nhau `delayMs` như BE thật.
+ */
+async function startSseServer(frames: Array<{delayMs: number; payload: Record<string, unknown>}>) {
+    const server = createServer((req, res) => {
+        if (req.method === 'OPTIONS') {
+            res.writeHead(204, {
+                'access-control-allow-origin': '*',
+                'access-control-allow-headers': '*',
+                'access-control-allow-methods': 'POST, OPTIONS',
+            });
+            res.end();
+            return;
+        }
+
+        res.writeHead(200, {
+            'content-type': 'text/event-stream',
+            'cache-control': 'no-cache',
+            'access-control-allow-origin': '*',
+        });
+
+        let index = 0;
+        const writeNext = () => {
+            if (index >= frames.length) {
+                res.end();
+                return;
+            }
+            const frame = frames[index];
+            index += 1;
+            setTimeout(() => {
+                res.write(`data: ${JSON.stringify(frame.payload)}\n\n`);
+                writeNext();
+            }, frame.delayMs);
+        };
+        writeNext();
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const {port} = server.address() as AddressInfo;
+    return {
+        url: `http://127.0.0.1:${port}/chat/stream`,
+        close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    };
+}
+
+test.describe('Pha truy hồi & answer rỗng (KB-4.11)', () => {
+    test('hiện "Đang truy hồi tài liệu (ns)" rồi "Đang viết câu trả lời"', async ({page}) => {
+        // Mô phỏng BE thật: `start` tới sau 2.5s (redanch CPU ~12.9s — TD-15), token cách 1.2s
+        const sse = await startSseServer([
+            {delayMs: 2500, payload: {type: 'start', conversation_id: 'conv-e2e', metadata: {model: 'openai/gpt-oss-120b'}}},
+            {delayMs: 1200, payload: {type: 'token', token: 'Xin chào'}},
+            {delayMs: 200, payload: {type: 'end', answer: 'Xin chào', sources: [], metadata: {model: 'openai/gpt-oss-120b'}}},
+        ]);
+
+        try {
+            await page.route('**/chat/stream', (route) =>
+                route.continue({url: sse.url, headers: {...route.request().headers()}}),
+            );
+
+            await page.goto('/');
+            await page.getByRole('textbox', {name: 'Câu hỏi'}).fill('Câu hỏi kiểm tra pha');
+            await page.getByRole('button', {name: 'Gửi câu hỏi'}).click();
+
+            const status = page.getByTestId('stream-phase');
+            // Pha 1: chưa có `start` ⇒ nhãn truy hồi + số giây
+            await expect(status).toContainText('Đang truy hồi tài liệu', {timeout: 2000});
+            await expect(status).toContainText(/\(\d+s\)/);
+            await page.screenshot({path: 'test-results/shot-09-retrieving.png'});
+
+            // Pha 2: nhận `start`, chưa có token ⇒ "đang viết"
+            await expect(status).toContainText('Đang viết câu trả lời', {timeout: 5000});
+            await page.screenshot({path: 'test-results/shot-10-writing.png'});
+
+            // Token tới ⇒ khối trạng thái biến mất, câu trả lời hiện
+            await expect(page.getByText('Xin chào')).toBeVisible({timeout: 5000});
+            await expect(status).toBeHidden();
+        } finally {
+            await sse.close();
+        }
+    });
+
+    test('answer rỗng: hiện giải thích + nút Thử lại, không có bubble trống', async ({page}) => {
+        const sse = await startSseServer([
+            {delayMs: 0, payload: {type: 'start', conversation_id: 'conv-empty', metadata: {model: 'openai/gpt-oss-120b'}}},
+            {delayMs: 100, payload: {type: 'end', answer: '   ', sources: [], metadata: {model: 'openai/gpt-oss-120b'}}},
+        ]);
+
+        try {
+            await page.route('**/chat/stream', (route) =>
+                route.continue({url: sse.url, headers: {...route.request().headers()}}),
+            );
+
+            await page.goto('/');
+            await page.getByRole('textbox', {name: 'Câu hỏi'}).fill('Câu hỏi trả về rỗng');
+            await page.getByRole('button', {name: 'Gửi câu hỏi'}).click();
+
+            const notice = page.getByTestId('empty-answer');
+            await expect(notice).toBeVisible({timeout: 8000});
+            await expect(notice).toContainText('Model không trả về nội dung');
+            await expect(page.getByRole('button', {name: 'Thử lại'})).toBeVisible();
+            await page.screenshot({path: 'test-results/shot-11-empty-answer.png'});
+        } finally {
+            await sse.close();
+        }
     });
 });

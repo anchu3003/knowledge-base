@@ -1,15 +1,19 @@
 'use client';
 
 import {useState} from 'react';
-import {Copy} from 'lucide-react';
+import {AlertTriangle, Copy} from 'lucide-react';
+
+import {Button} from '@/components/ui/button';
 
 import {Avatar, AvatarFallback} from '@/components/ui/avatar';
 import {Skeleton} from '@/components/ui/skeleton';
 import {MessageWithCitations} from '@/components/message-with-citations';
 import {PiiBadge} from '@/components/pii-badge';
 import {SourcesPanel} from '@/components/sources-panel';
+import {StreamStatus} from '@/components/stream-status';
 import {useToast} from '@/components/toast-provider';
 import type {ChatMessage} from '@/lib/types';
+import {EMPTY_ANSWER_HINT, type StreamPhase} from '@/lib/stream-phase';
 
 /** Message type sống ở `lib/types.ts` (KB-4.9: `lib/chat-store.ts` cũng cần) — re-export cho chỗ cũ. */
 export type {ChatMessage};
@@ -64,6 +68,12 @@ interface ChatMessagesProps {
     isLoading: boolean;
     citationFocus: CitationFocus | null;
     onCitationClick: (messageId: string, citationId: string) => void;
+    /** Pha hiện tại của lượt đang chạy (KB-4.11): `retrieving` trước `start`, `writing` sau `start`. */
+    streamPhase?: StreamPhase;
+    /** `Date.now()` lúc bấm gửi — dùng để đếm giây đã chờ. */
+    requestStartedAt?: number | null;
+    /** Gửi lại câu hỏi cuối (nút **Thử lại** ở thông báo answer rỗng). */
+    onRetry?: () => void;
     /** Phần tử neo để auto-scroll xuống cuối (page giữ ref) */
     bottomRef?: React.Ref<HTMLDivElement>;
 }
@@ -74,12 +84,24 @@ interface ChatMessagesProps {
  * Thay đổi so với bản onboarding: bubble **full-width** (bỏ `max-w-md`), bỏ gradient tự phát,
  * dùng token `bg-card`/`border-border` ⇒ đọc được ở cả light và dark.
  */
-export function ChatMessages({messages, isLoading, citationFocus, onCitationClick, bottomRef}: ChatMessagesProps) {
+export function ChatMessages({
+    messages,
+    isLoading,
+    citationFocus,
+    onCitationClick,
+    streamPhase = 'idle',
+    requestStartedAt = null,
+    onRetry,
+    bottomRef,
+}: ChatMessagesProps) {
     const hasStreamingBubble = messages.some((message) => message.isStreaming);
+    // KB-4.11: bubble stream **rỗng** (chưa có token nào) do `StreamStatus` đảm nhiệm ⇒ không render
+    // cả hai (trước đây hiện thêm bubble "..." gây trùng lặp).
+    const visibleMessages = messages.filter((message) => !(message.isStreaming && message.content.trim().length === 0));
 
     return (
         <div className="mx-auto w-full max-w-3xl space-y-6 px-3 py-6">
-            {messages.map((message) => {
+            {visibleMessages.map((message) => {
                 const isUser = message.role === 'user';
                 return (
                     <div
@@ -106,6 +128,20 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
                                         <PiiBadge count={message.metadata?.pii_redacted_count ?? 0}/>
                                     </div>
                                 )}
+                                {message.emptyAnswer ? (
+                                    <div className="space-y-2" data-testid="empty-answer">
+                                        <p className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+                                            <AlertTriangle className="size-4 shrink-0"/>
+                                            Model không trả về nội dung cho câu hỏi này
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">{EMPTY_ANSWER_HINT}</p>
+                                        {onRetry && (
+                                            <Button size="sm" variant="outline" onClick={onRetry}>
+                                                Thử lại
+                                            </Button>
+                                        )}
+                                    </div>
+                                ) : (
                                 <MessageWithCitations
                                     content={message.content}
                                     isStreaming={message.isStreaming}
@@ -114,6 +150,7 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
                                     stopped={message.stopped}
                                     onCitationClick={(citationId) => onCitationClick(message.id, citationId)}
                                 />
+                                )}
                             </div>
 
                             {/* Hành động của message: nằm NGOÀI bubble (không chiếm chỗ / không đè chữ), hiện khi hover */}
@@ -139,8 +176,13 @@ export function ChatMessages({messages, isLoading, citationFocus, onCitationClic
                 );
             })}
 
-            {/* Chỉ hiện skeleton khi CHƯA có bubble stream (tránh 2 chỗ loading cùng lúc) */}
-            {isLoading && !hasStreamingBubble && (
+            {/* Pha truy hồi/đang viết (KB-4.11) — thay spinner câm; có số giây đã chờ */}
+            {isLoading && (streamPhase === 'retrieving' || streamPhase === 'writing') && (
+                <StreamStatus phase={streamPhase} startedAt={requestStartedAt ?? null}/>
+            )}
+
+            {/* Dự phòng: đang chờ nhưng chưa xác định được pha (vd. fallback blocking `/chat`) */}
+            {isLoading && !hasStreamingBubble && streamPhase !== 'retrieving' && streamPhase !== 'writing' && (
                 <div className="flex items-start gap-2.5">
                     <Avatar className="mt-0.5 hidden sm:flex">
                         <AvatarFallback>AI</AvatarFallback>

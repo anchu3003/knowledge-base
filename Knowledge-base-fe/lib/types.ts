@@ -100,6 +100,8 @@ export interface ChatMessage {
     isStreaming?: boolean
     /** Người dùng bấm Stop giữa lúc stream (KB-4.4). */
     stopped?: boolean
+    /** `end.answer` rỗng ⇒ hiện giải thích + nút Thử lại thay vì bubble trống (KB-4.11). */
+    emptyAnswer?: boolean
 }
 
 export interface ChatRequest {
