@@ -84,6 +84,9 @@ export interface ChatMetadata {
     pii_redacted?: boolean
     pii_redacted_count?: number
     query_rewrite_attempts?: number
+    /** KB-5.4: câu hỏi nhiều ý được tách thành các phần này (rỗng/không có = retrieve 1 bước). */
+    multi_query_parts?: string[]
+    multi_query_enabled?: boolean
     [key: string]: unknown
 }
 
