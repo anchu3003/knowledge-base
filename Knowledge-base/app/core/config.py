@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     documents_folder: str = Field(default="Interview", alias="DOCUMENTS_FOLDER")
     auto_load_on_startup: bool = Field(default=True, alias="AUTO_LOAD_ON_STARTUP")
 
+    # Lịch sử hội thoại bền (KB-5.2): 1 file SQLite. Đặt trong volume `./data` để sống qua restart.
+    # Để rỗng (`CHAT_DB_PATH=`) ⇒ tắt persistence, quay lại hành vi in-memory (chỉ dùng khi debug).
+    chat_db_path: str = Field(default="./data/chat.db", alias="CHAT_DB_PATH")
+    # Giữ tối đa bao nhiêu session trong DB (Q&A KB-5.2 Q3 = 200). Vượt ⇒ xoá session cũ nhất.
+    max_conversations: int = Field(default=200, alias="MAX_CONVERSATIONS")
+
+
     # CORS (KB-4.7): danh sách origin của FE, phân tách bằng dấu phẩy.
     # Mặc định gồm port dev 3000 và port compose 3010 (dời port để không trùng project khác).
     allowed_origins: str = Field(

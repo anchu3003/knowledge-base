@@ -63,6 +63,46 @@ class DocumentUploadResponse(BaseModel):
     details: Optional[List[Dict[str, Any]]] = None
 
 
+class ConversationMessage(BaseModel):
+    """1 message trong lịch sử hội thoại (KB-5.2).
+
+    `content` là bản **đã redact PII** khi lưu (xem `ChatService._update_conversation`).
+    """
+
+    role: str
+    content: str
+    timestamp: str
+    interrupted: bool = False
+
+
+class ConversationSummary(BaseModel):
+    """1 dòng trong `GET /conversations` (không kèm messages)."""
+
+    id: str
+    title: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    message_count: int = 0
+
+
+class ConversationListResponse(BaseModel):
+    """`GET /conversations` — mới nhất trước."""
+
+    conversations: List[ConversationSummary] = []
+    total: int = 0
+
+
+class ConversationDetail(BaseModel):
+    """`GET /conversations/{id}` — kèm toàn bộ messages."""
+
+    id: str
+    title: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    messages: List[ConversationMessage] = []
+
+
+
 # ------------------------------
 # Chat
 # ------------------------------

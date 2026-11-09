@@ -117,6 +117,14 @@ class DocumentsFolderEmptyError(AppError):
     public_message = "Documents folder is missing or has no supported files."
 
 
+class ConversationStoreError(AppError):
+    """Lỗi khi đọc/ghi lịch sử hội thoại (SQLite) → 500."""
+
+    code = "conversation_store_error"
+    http_status = 500
+    public_message = "The conversation history operation failed."
+
+
 class NotFoundError(AppError):
     """Không tìm thấy tài nguyên → 404."""
 

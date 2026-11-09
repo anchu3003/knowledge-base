@@ -25,6 +25,9 @@ services:
       # folder ⇒ Refresh index sẽ clear 601 chunk rồi index 0 file (mất index). Mount ro: sửa/thêm file trên host
       # là container thấy ngay, không cần build lại.
       - ./Interview:/app/Interview:ro
+      # KB-5.2: lịch sử hội thoại (SQLite) phải sống qua restart/recreate ⇒ bind mount thư mục `./data`.
+      # `CHAT_DB_PATH` mặc định `./data/chat.db` (trong WORKDIR /app ⇒ `/app/data/chat.db`).
+      - ./data:/app/data
       - hf-cache:/hf-cache
     restart: unless-stopped
     # healthcheck đã khai báo trong Dockerfile của BE (GET /health); ở compose nới `start_period` vì lần
