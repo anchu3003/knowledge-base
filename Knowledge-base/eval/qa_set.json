@@ -1,98 +1,227 @@
 {
-  "version": 2,
+  "version": 3,
   "created": "2026-11-07",
-  "updated": "2026-11-07",
-  "notes": "Golden set cho eval retrieval + grounding. v2 (KB-2.4): user dọn corpus Interview/ còn Backend&Devops ⇒ bỏ 5 câu trỏ tài liệu đã xoá (React Router, CSS, Vuex, English, Spring Boot Q&A), thêm 5 câu từ tài liệu còn lại. expected_files tính từ DOCUMENTS_FOLDER (Interview/).",
+  "updated": "2026-11-09",
+  "notes": "Golden set cho eval retrieval + grounding. v2 (KB-2.4): user dọn corpus Interview/ còn Backend&Devops ⇒ bỏ 5 câu trỏ tài liệu đã xoá, thêm 5 câu từ tài liệu còn lại. v3 (KB-5.4): thêm 5 câu **nhiều ý** (q16–q20), mỗi câu cần thông tin từ **2 tài liệu** ⇒ dùng để đo multi-query (hit@k nhạy với việc phủ đủ ý hơn là 15 câu cũ đã bão hoà 1.0). expected_files tính từ DOCUMENTS_FOLDER (Interview/).",
   "items": [
     {
       "id": "q01",
       "question": "Saga pattern giải quyết vấn đề gì trong microservices và tại sao không dùng 2PC?",
-      "expected_files": ["Backend&Devops/Design patterns & Architecture/Saga Pattern.md"],
-      "expected_keywords": ["saga", "compensat"]
+      "expected_files": [
+        "Backend&Devops/Design patterns & Architecture/Saga Pattern.md"
+      ],
+      "expected_keywords": [
+        "saga",
+        "compensat"
+      ]
     },
     {
       "id": "q02",
       "question": "Chuẩn hoá database (normalization) nhằm mục đích gì?",
-      "expected_files": ["Backend&Devops/DBMS & SQL/Data Normalization.md"],
-      "expected_keywords": ["redundan", "anomal"]
+      "expected_files": [
+        "Backend&Devops/DBMS & SQL/Data Normalization.md"
+      ],
+      "expected_keywords": [
+        "redundan",
+        "anomal"
+      ]
     },
     {
       "id": "q03",
       "question": "Khi nào nên dùng B-Tree index và khi nào nên dùng Hash index?",
-      "expected_files": ["Backend&Devops/DBMS & SQL/Index.md"],
-      "expected_keywords": ["range", "equality"]
+      "expected_files": [
+        "Backend&Devops/DBMS & SQL/Index.md"
+      ],
+      "expected_keywords": [
+        "range",
+        "equality"
+      ]
     },
     {
       "id": "q04",
       "question": "API Gateway có những trách nhiệm gì và Zuul khác Spring Cloud Gateway ở điểm nào?",
-      "expected_files": ["Backend&Devops/Microservices/API Gateway.md"],
-      "expected_keywords": ["gateway", "zuul"]
+      "expected_files": [
+        "Backend&Devops/Microservices/API Gateway.md"
+      ],
+      "expected_keywords": [
+        "gateway",
+        "zuul"
+      ]
     },
     {
       "id": "q05",
       "question": "Client-side load balancing với Netflix Ribbon có đặc điểm và tính năng gì?",
-      "expected_files": ["Backend&Devops/Microservices/Client Side Load balancer.md"],
-      "expected_keywords": ["ribbon"]
+      "expected_files": [
+        "Backend&Devops/Microservices/Client Side Load balancer.md"
+      ],
+      "expected_keywords": [
+        "ribbon"
+      ]
     },
     {
       "id": "q06",
       "question": "Container trong Docker khác image như thế nào?",
-      "expected_files": ["Backend&Devops/Tools/Docker.md"],
-      "expected_keywords": ["container", "image"]
+      "expected_files": [
+        "Backend&Devops/Tools/Docker.md"
+      ],
+      "expected_keywords": [
+        "container",
+        "image"
+      ]
     },
     {
       "id": "q07",
       "question": "Optimistic locking trong JPA được implement như thế nào?",
-      "expected_files": ["Backend&Devops/Java/ORM&JPA/JPA & Hibernate.md"],
-      "expected_keywords": ["version"]
+      "expected_files": [
+        "Backend&Devops/Java/ORM&JPA/JPA & Hibernate.md"
+      ],
+      "expected_keywords": [
+        "version"
+      ]
     },
     {
       "id": "q08",
       "question": "Sự khác nhau giữa @BeforeEach và @BeforeAll trong JUnit 5 là gì?",
-      "expected_files": ["Backend&Devops/Java/JUnit 5.md"],
-      "expected_keywords": ["beforeeach", "beforeall"]
+      "expected_files": [
+        "Backend&Devops/Java/JUnit 5.md"
+      ],
+      "expected_keywords": [
+        "beforeeach",
+        "beforeall"
+      ]
     },
     {
       "id": "q09",
       "question": "Spring Boot là gì và lợi ích chính so với cấu hình Spring truyền thống?",
-      "expected_files": ["Backend&Devops/Java/Spring Projects/Spring Boot.md"],
-      "expected_keywords": ["spring boot"]
+      "expected_files": [
+        "Backend&Devops/Java/Spring Projects/Spring Boot.md"
+      ],
+      "expected_keywords": [
+        "spring boot"
+      ]
     },
     {
       "id": "q10",
       "question": "Discovery server (Eureka naming server) có những chức năng chính nào?",
-      "expected_files": ["Backend&Devops/Microservices/Discovery Server.md"],
-      "expected_keywords": ["service registration", "discovery"]
+      "expected_files": [
+        "Backend&Devops/Microservices/Discovery Server.md"
+      ],
+      "expected_keywords": [
+        "service registration",
+        "discovery"
+      ]
     },
     {
       "id": "q11",
       "question": "Spring Cloud Config Server dùng để làm gì?",
-      "expected_files": ["Backend&Devops/Microservices/Config Server.md"],
-      "expected_keywords": ["config"]
+      "expected_files": [
+        "Backend&Devops/Microservices/Config Server.md"
+      ],
+      "expected_keywords": [
+        "config"
+      ]
     },
     {
       "id": "q12",
       "question": "Phân biệt stateless và stateful authentication trong Spring Security?",
-      "expected_files": ["Backend&Devops/Java/Spring Projects/Spring Security.md"],
-      "expected_keywords": ["stateless"]
+      "expected_files": [
+        "Backend&Devops/Java/Spring Projects/Spring Security.md"
+      ],
+      "expected_keywords": [
+        "stateless"
+      ]
     },
     {
       "id": "q13",
       "question": "Quy trình optimize một câu query SQL chậm gồm những bước nào?",
-      "expected_files": ["Backend&Devops/DBMS & SQL/Optimize Query.md"],
-      "expected_keywords": ["execution plan"]
+      "expected_files": [
+        "Backend&Devops/DBMS & SQL/Optimize Query.md"
+      ],
+      "expected_keywords": [
+        "execution plan"
+      ]
     },
     {
       "id": "q14",
       "question": "Các lệnh git CLI cơ bản để commit và push code là gì?",
-      "expected_files": ["Backend&Devops/Tools/Git.md"],
-      "expected_keywords": ["git commit", "git push"]
+      "expected_files": [
+        "Backend&Devops/Tools/Git.md"
+      ],
+      "expected_keywords": [
+        "git commit",
+        "git push"
+      ]
     },
     {
       "id": "q15",
       "question": "RabbitMQ là gì và exchange có vai trò gì trong RabbitMQ?",
-      "expected_files": ["Backend&Devops/Messaging/Rabitmq.md"],
-      "expected_keywords": ["exchange"]
+      "expected_files": [
+        "Backend&Devops/Messaging/Rabitmq.md"
+      ],
+      "expected_keywords": [
+        "exchange"
+      ]
+    },
+    {
+      "id": "q16",
+      "question": "API Gateway xử lý authentication ở tầng nào và nó liên quan gì tới Spring Security?",
+      "expected_files": [
+        "Backend&Devops/Microservices/API Gateway.md",
+        "Backend&Devops/Java/Spring Projects/Spring Security.md"
+      ],
+      "expected_keywords": [
+        "gateway",
+        "security"
+      ]
+    },
+    {
+      "id": "q17",
+      "question": "Docker image khác container như thế nào và Spring Boot đóng gói app thành image ra sao?",
+      "expected_files": [
+        "Backend&Devops/Tools/Docker.md",
+        "Backend&Devops/Java/Spring Projects/Spring Boot.md"
+      ],
+      "expected_keywords": [
+        "image",
+        "container"
+      ]
+    },
+    {
+      "id": "q18",
+      "question": "Discovery Server (Eureka) và Config Server khác nhau ở vai trò gì trong hệ microservice?",
+      "expected_files": [
+        "Backend&Devops/Microservices/Discovery Server.md",
+        "Backend&Devops/Microservices/Config Server.md"
+      ],
+      "expected_keywords": [
+        "eureka",
+        "config"
+      ]
+    },
+    {
+      "id": "q19",
+      "question": "Khi optimize một câu query SQL chậm thì nên xem index nào và dùng hint ra sao?",
+      "expected_files": [
+        "Backend&Devops/DBMS & SQL/Optimize Query.md",
+        "Backend&Devops/DBMS & SQL/Index.md",
+        "Backend&Devops/DBMS & SQL/Oracle Sql Hints.md"
+      ],
+      "expected_keywords": [
+        "index",
+        "hint"
+      ]
+    },
+    {
+      "id": "q20",
+      "question": "Saga pattern và RabbitMQ phối hợp thế nào để đảm bảo eventual consistency giữa các service?",
+      "expected_files": [
+        "Backend&Devops/Design patterns & Architecture/Saga Pattern.md",
+        "Backend&Devops/Messaging/Rabitmq.md"
+      ],
+      "expected_keywords": [
+        "saga",
+        "rabbit"
+      ]
     }
   ]
 }

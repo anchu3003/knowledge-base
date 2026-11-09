@@ -117,6 +117,9 @@ def make_chat_service(error) -> ChatService:
         rewrite_min_results=2,
         rewrite_min_top_score=0.3,
         rewrite_max_attempts=2,
+        # KB-5.4: cờ multi-query (TẮT để các test 1-bước cũ giữ nguyên hành vi)
+        multi_query_enabled=False,
+        multi_query_max_parts=3,
         max_conversation_length=10,
         system_prompt_path=None,
         context_max_chars=6000,

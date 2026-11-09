@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     rewrite_min_top_score: float = Field(default=0.3, alias="REWRITE_MIN_TOP_SCORE")
     rewrite_max_attempts: int = Field(default=2, alias="REWRITE_MAX_ATTEMPTS")
 
+    # Multi-query (KB-5.4): tách câu hỏi nhiều ý bằng **heuristic** (0 token LLM) rồi retrieve từng phần
+    # và gộp kết quả. Tắt bằng `MULTI_QUERY_ENABLED=false` để quay lại hành vi 1 bước (A/B + rollback).
+    multi_query_enabled: bool = Field(default=True, alias="MULTI_QUERY_ENABLED")
+    multi_query_max_parts: int = Field(default=3, alias="MULTI_QUERY_MAX_PARTS")
+
     # Hybrid Retrieval and Re-ranking
     enable_bm25: bool = Field(default=True, alias="ENABLE_BM25")
     enable_hybrid: bool = Field(default=True, alias="ENABLE_HYBRID")

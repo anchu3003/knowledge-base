@@ -14,6 +14,7 @@ from app.core.provider_retry import ProviderThrottle
 from app.services.document_service import DocumentService
 from app.services.conversation_store import ConversationStore
 from app.services.pii_service import PIIRedactor, summarize_pii_stats
+from app.services.multi_query import merge_hits, split_query
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,59 @@ class ChatService:
         # (KB-3.2). LLM được tạo với `max_retries=0` ⇒ chỉ có MỘT tầng retry.
         self.provider = ProviderThrottle(settings)
 
+    async def _initial_retrieval(self, query: str) -> tuple[List[Dict[str, Any]], List[str]]:
+        """Retrieval bước đầu, có **multi-query** cho câu hỏi nhiều ý (KB-5.4).
+
+        Trả `(hits, parts)`:
+        - `parts` rỗng ⇒ câu hỏi **một ý** (hoặc multi-query bị tắt) ⇒ hành vi y như trước KB-5.4.
+        - `parts` ≥ 2 ⇒ đã retrieve từng phần và gộp (mỗi chunk giữ score cao nhất).
+
+        Tách bằng heuristic (0 token LLM — xem `app/services/multi_query.py`). Mỗi phần chỉ chấm
+        `rerank_top_n // 2` ứng viên để latency không nhân lên gấp N; các phần chạy **song song**.
+        """
+        if not self.settings.multi_query_enabled:
+            docs = await self.document_service.search_similar_documents(
+                query=query, k=self.settings.retrieval_k
+            )
+            return docs, []
+
+        parts = split_query(query, max_parts=self.settings.multi_query_max_parts)
+        if len(parts) <= 1:
+            docs = await self.document_service.search_similar_documents(
+                query=query, k=self.settings.retrieval_k
+            )
+            return docs, []
+
+        per_part_top_n = max(2, self.settings.rerank_top_n // 2)
+        results = await asyncio.gather(
+            *[
+                self.document_service.search_similar_documents(
+                    query=part,
+                    k=self.settings.retrieval_k,
+                    rerank_top_n=per_part_top_n,
+                )
+                for part in parts
+            ],
+            return_exceptions=True,
+        )
+        hit_lists = [result for result in results if isinstance(result, list) and result]
+        if not hit_lists:
+            # Mọi phần đều lỗi ⇒ không để câu hỏi chết: fallback về 1 bước như trước
+            logger.warning("multi-query: tất cả sub-query lỗi, fallback single-query")
+            docs = await self.document_service.search_similar_documents(
+                query=query, k=self.settings.retrieval_k
+            )
+            return docs, []
+
+        merged = merge_hits(hit_lists)[: self.settings.retrieval_k]
+        logger.info("multi-query: %d phần, %d hit sau gộp", len(parts), len(merged))
+        return merged, parts
+
+    async def retrieve(self, query: str) -> List[Dict[str, Any]]:
+        """Retrieval-only (eval harness + debug): hits sau multi-query, **không** gọi LLM trả lời."""
+        docs, _ = await self._initial_retrieval(query)
+        return docs
+
     async def chat(
             self,
             message: str,
@@ -129,13 +183,10 @@ class ChatService:
         temperature = temperature or self.settings.default_temperature
 
         try:
-            # Initial retrieval
+            # Initial retrieval (KB-5.4: câu hỏi nhiều ý ⇒ retrieve từng phần rồi gộp)
             used_query = message
             rewrite_attempts = 0
-            similar_docs = await self.document_service.search_similar_documents(
-                query=used_query,
-                k=self.settings.retrieval_k
-            )
+            similar_docs, multi_query_parts = await self._initial_retrieval(message)
 
             # Optionally perform query rewriting if retrieval quality is poor
             if self.settings.enable_query_rewrite:
@@ -216,6 +267,8 @@ class ChatService:
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
                     "query_rewrite_attempts": rewrite_attempts,
+                    "multi_query_enabled": self.settings.multi_query_enabled,
+                    "multi_query_parts": multi_query_parts,
                     "pii_redaction": pii_stats,
                     **summarize_pii_stats(pii_stats)
                 }
@@ -262,13 +315,10 @@ class ChatService:
         emitted_tokens = False
 
         try:
-            # Initial retrieval
+            # Initial retrieval (KB-5.4: câu hỏi nhiều ý ⇒ retrieve từng phần rồi gộp)
             used_query = message
             rewrite_attempts = 0
-            similar_docs = await self.document_service.search_similar_documents(
-                query=used_query,
-                k=self.settings.retrieval_k
-            )
+            similar_docs, multi_query_parts = await self._initial_retrieval(message)
 
             # Optional query rewrite if results are weak
             if self.settings.enable_query_rewrite:
@@ -335,6 +385,8 @@ class ChatService:
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
                     "query_rewrite_attempts": rewrite_attempts,
+                    "multi_query_enabled": self.settings.multi_query_enabled,
+                    "multi_query_parts": multi_query_parts,
                     "pii_redaction": pii_stats,
                     **summarize_pii_stats(pii_stats)
                 }
@@ -373,6 +425,8 @@ class ChatService:
                     "used_query": used_query,
                     "query_rewrite_enabled": self.settings.enable_query_rewrite,
                     "query_rewrite_attempts": rewrite_attempts,
+                    "multi_query_enabled": self.settings.multi_query_enabled,
+                    "multi_query_parts": multi_query_parts,
                     "pii_redaction": pii_stats,
                     **summarize_pii_stats(pii_stats)
                 }
