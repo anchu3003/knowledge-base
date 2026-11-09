@@ -35,12 +35,20 @@ from app.services.index_sync import (
     scan_folder,
 )
 from app.services.pii_service import PIIRedactor, redact_texts_for_ingest
+from app.services.rerank_cache import RerankCache, make_cache_key
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentService:
     """Service for handling document processing and vector storage"""
+
+    #: Default an toàn khi test dựng service bằng `object.__new__(DocumentService)` (không qua
+    #: `__init__`) — cùng bài học KB-5.2: attribute mới thêm vào service **phải** có class default,
+    #: nếu không test cũ vỡ bằng `AttributeError` (xem TD-27).
+    _index_version: int = 0
+    _rerank_cache: Optional[RerankCache] = None
+    _config_fingerprint: str = ""
 
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -89,6 +97,24 @@ class DocumentService:
         self._corpus_metas: List[Dict[str, Any]] = []
         self._bm25: Optional[TypingAny] = None
         self._cross_encoder: Optional[TypingAny] = None
+
+        # KB-5.3: cache điểm rerank trong RAM (query + index_version + tham số) ⇒ hỏi lại câu cũ
+        # không phải chấm lại 8–13 s. Tắt bằng `RERANK_CACHE_ENABLED=false` (dùng khi đo eval).
+        self._index_version: int = 0
+        self._rerank_cache: Optional[RerankCache] = None
+        if self.settings.rerank_cache_enabled:
+            self._rerank_cache = RerankCache(
+                max_entries=self.settings.rerank_cache_max_entries,
+                ttl_seconds=self.settings.rerank_cache_ttl_seconds,
+            )
+        # Mọi tham số ảnh hưởng tập ứng viên/time rerank ⇒ phải nằm trong khoá cache: đổi config
+        # (restart với env khác) là entry cũ không dùng lại được nữa.
+        self._config_fingerprint = (
+            f"h={int(self.settings.enable_hybrid)}:a={self.settings.hybrid_alpha}:"
+            f"d={int(self.settings.dedup_enabled)}:{self.settings.dedup_jaccard_threshold}:"
+            f"cap={self.settings.max_chunks_per_file}:m={self.settings.rerank_model}:"
+            f"thr={self.settings.similarity_threshold}:ck={self.settings.hybrid_candidate_k}"
+        )
 
         # Attempt to bootstrap BM25 from existing Chroma collection
         try:
@@ -356,6 +382,8 @@ class DocumentService:
                 )
                 added += len(batch_texts)
                 logger.info(f"Upserted batch {start}-{end - 1} ({len(batch_texts)}) documents to ChromaDB collection.")
+                # KB-5.3: nội dung index đổi ⇒ cache rerank cũ không còn đúng
+                self._mark_index_changed()
             except Exception as e:
                 logger.error(f"Error adding batch {start}-{end - 1} to ChromaDB: {e}")
                 raise
@@ -393,6 +421,15 @@ class DocumentService:
                 logger.info(f"CrossEncoder loaded: {self.settings.rerank_model}")
             except Exception as e:
                 logger.warning(f"Failed to load CrossEncoder model {self.settings.rerank_model}: {e}")
+
+    def _mark_index_changed(self) -> None:
+        """Index vừa đổi (KB-5.3): tăng `index_version` + xoá cache rerank.
+
+        Nhờ version nằm trong khoá cache, mọi entry cũ tự vô hiệu — kể cả khi quên gọi clear.
+        """
+        self._index_version += 1
+        if self._rerank_cache is not None:
+            self._rerank_cache.clear()
 
     def _postprocess_hits(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Hậu xử lý kết quả retrieval (KB-2.2): bỏ chunk gần trùng + giới hạn chunk/file.
@@ -534,6 +571,21 @@ class DocumentService:
             top_n = min(self.settings.rerank_top_n, len(candidates))
             pairs = [(query, c["content"]) for c in candidates[:top_n]]
 
+            # KB-5.3: tra cache trước — cùng câu hỏi + index chưa đổi ⇒ bỏ qua 8–13 s rerank.
+            cache_key = None
+            rerank_scores: Optional[List[float]] = None
+            if self._rerank_cache is not None:
+                cache_key = make_cache_key(
+                    query=query,
+                    index_version=self._index_version,
+                    k=k,
+                    top_n=top_n,
+                    config_fingerprint=self._config_fingerprint,
+                )
+                rerank_scores = self._rerank_cache.get(cache_key)
+                if rerank_scores is not None:
+                    logger.debug("rerank cache hit (top_n=%d, index_version=%d)", top_n, self._index_version)
+
             # Run cross-encoder off the event loop
             def _score_pairs() -> List[float]:
                 self._ensure_cross_encoder()
@@ -541,7 +593,12 @@ class DocumentService:
                     return [0.0] * len(pairs)
                 return list(self._cross_encoder.predict(pairs))
 
-            rerank_scores: List[float] = await loop.run_in_executor(self.executor, lambda x: _score_pairs(), None)
+            if rerank_scores is None:
+                rerank_scores = await loop.run_in_executor(self.executor, lambda x: _score_pairs(), None)
+                # Chỉ cache khi có kết quả thật (encoder lỗi ⇒ toàn 0.0, không nên giữ lại)
+                if cache_key is not None and rerank_scores and any(score != 0.0 for score in rerank_scores):
+                    self._rerank_cache.set(cache_key, rerank_scores)
+
             reranked = list(zip(candidates[:top_n], rerank_scores))
             reranked.sort(key=lambda item: item[1], reverse=True)
             candidates = [{**hit, "score": float(score)} for hit, score in reranked] + candidates[top_n:]
@@ -555,11 +612,15 @@ class DocumentService:
         """Get the status of the document database"""
         try:
             count = self.collection.count()
-            return {
+            status: Dict[str, Any] = {
                 "collection_name": self.settings.collection_name,
                 "document_count": count,
-                "status": "healthy" if count > 0 else "empty"
+                "status": "healthy" if count > 0 else "empty",
+                # KB-5.3: `index_version` tăng mỗi lần index đổi; cache rerank keyed theo nó
+                "index_version": self._index_version,
+                "rerank_cache": self._rerank_cache.stats() if self._rerank_cache is not None else None,
             }
+            return status
         except Exception as e:
             logger.error(f"Error getting database status: {e}")
             return {
@@ -608,6 +669,8 @@ class DocumentService:
             if not ids:
                 return 0
             self.collection.delete(ids=ids)
+            # KB-5.3: index đổi ⇒ cache rerank cũ không còn đúng
+            self._mark_index_changed()
             return len(ids)
         except Exception as exc:  # pragma: no cover
             logger.warning(f"delete_file_chunks({source}): {exc}")
@@ -721,6 +784,8 @@ class DocumentService:
             self._corpus_texts = []
             self._corpus_metas = []
             self._bm25 = None
+            # KB-5.3: index rỗng ⇒ mọi entry cache rerank vô nghĩa
+            self._mark_index_changed()
             logger.info("ChromaDB collection cleared and recreated successfully.")
         except Exception as e:
             logger.error(f"Error clearing database: {str(e)}")
