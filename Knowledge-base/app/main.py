@@ -36,6 +36,7 @@ from app.models.schemas import (
     ChatRequest,
     ChatResponse,
     DocumentUploadResponse,
+    DocumentSyncResponse,
     HealthResponse,
     HealthStatusResponse,
     ReadinessResponse,
@@ -77,34 +78,31 @@ async def lifespan(application: FastAPI):
             print(f"Failed to initialize chat service: {str(e)}")
             raise
 
-        # Auto-load documents if enabled (KB-4.10)
+        # Index tăng dần lúc khởi động (KB-5.1, Q&A Q1 = nút Đồng bộ + tự động khi start)
         if setting.auto_load_on_startup:
             documents_folder = Path(setting.documents_folder)
-            # Trước đây startup luôn re-index toàn bộ folder ⇒ mount folder vào container làm mỗi lần start
-            # mất nhiều phút (embedding lại 601 chunk đã có). Chỉ auto-load khi index còn rỗng;
-            # re-index chủ động thì dùng `POST /documents/refresh`.
-            existing_chunks = 0
-            try:
-                existing_chunks = int(document_service.collection.count())
-            except Exception as e:
-                print(f"Warning: cannot read collection count: {str(e)}")
-
-            if existing_chunks > 0:
+            supported = count_supported_files(documents_folder, setting.supported_extensions)
+            # Guard: folder rỗng/không tồn tại ⇒ KHÔNG sync (nếu sync, mọi file đang có index sẽ bị coi là "đã xoá"
+            # và bị xoá khỏi vector store — đúng lỗi mất dữ liệu mà KB-4.10 đã chặn cho `/documents/refresh`).
+            if not documents_folder.exists() or supported == 0:
                 print(
-                    f"Skip auto-load: index đã có {existing_chunks} chunk "
-                    f"(dùng POST /documents/refresh nếu muốn re-index từ {documents_folder})"
+                    f"Skip startup sync: folder '{documents_folder}' "
+                    f"(exists={documents_folder.exists()}, supported_files={supported})"
                 )
             else:
-                print(f"Auto-loading documents from '{documents_folder}' folder...")
+                print(f"Syncing documents from '{documents_folder}' ({supported} file hỗ trợ)...")
                 try:
-                    result = await document_service.auto_load_documents()
-                    if result["processed_files"] > 0:
-                        print(f"Auto-loaded {result['processed_files']} files, {result['total_chunks']} chunks")
-                    else:
-                        print("No documents found to auto-load")
+                    summary = await document_service.sync_documents()
+                    print(
+                        "Startup sync: "
+                        f"+{len(summary['added'])} mới, ~{len(summary['updated'])} cập nhật, "
+                        f"-{len(summary['removed'])} xoá, unchanged={summary['unchanged']}, "
+                        f"chunks={summary['total_chunks']}, {summary['elapsed_ms']}ms"
+                    )
                 except Exception as e:
-                    print(f"Warning: Error auto-loading documents: {str(e)}")
-                    print("Continuing startup without auto-loaded documents...")
+                    # Không chặn startup: app vẫn chạy được với index hiện có (chỉ thiếu file mới)
+                    print(f"Warning: startup sync failed: {type(e).__name__}: {str(e)}")
+                    print("Continuing startup with the existing index...")
 
         print("RAG Chatbot API initialized successfully")
     except Exception as e:
@@ -338,6 +336,45 @@ async def refresh_documents(
         raise
     except Exception as e:
         raise DocumentStoreError(f"refresh_documents: {type(e).__name__}: {e}") from e
+
+
+@app.post("/documents/sync", response_model=DocumentSyncResponse)
+async def sync_documents(
+        service: DocumentService = Depends(get_document_service)
+):
+    """
+    Index **tăng dần** (KB-5.1): so folder với index, chỉ embed file mới/đổi và xoá chunk của file đã bị xoá.
+
+    Khác `/documents/refresh` (clear rồi index lại tất cả — ~22 phút với 601 chunk, TD-14): sync **không**
+    xoá index hiện có nên chat vẫn trả lời được trong lúc chạy.
+    """
+    # Guard giống refresh: folder không tồn tại / 0 file hỗ trợ ⇒ coi như "mất nguồn" ⇒ KHÔNG sync.
+    # Nếu bỏ guard này, sync sẽ thấy "index có 601 chunk mà folder rỗng" và **xoá sạch** index (mất dữ liệu).
+    setting = get_settings()
+    documents_path = Path(setting.documents_folder)
+    supported = count_supported_files(documents_path, setting.supported_extensions)
+    if not documents_path.exists() or supported == 0:
+        raise DocumentsFolderEmptyError(
+            f"sync_documents: folder={documents_path} exists={documents_path.exists()} supported_files={supported}"
+        )
+
+    try:
+        result = await service.sync_documents()
+        total_changes = len(result.get("added", [])) + len(result.get("updated", [])) + len(result.get("removed", []))
+        message = (
+            "Không có thay đổi nào trong folder tài liệu"
+            if total_changes == 0
+            else (
+                f"+{len(result.get('added', []))} mới, ~{len(result.get('updated', []))} cập nhật, "
+                f"-{len(result.get('removed', []))} xoá"
+            )
+        )
+        return DocumentSyncResponse(success=True, message=message, **result)
+
+    except AppError:
+        raise
+    except Exception as e:
+        raise DocumentStoreError(f"sync_documents: {type(e).__name__}: {e}") from e
 
 
 @app.get("/documents/folder-info")
