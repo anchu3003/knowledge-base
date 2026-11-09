@@ -77,6 +77,7 @@ npm run test:e2e                        # ~5s cho 7 check, tự bật `npm run d
 | Responsive | 720px: sidebar ẩn + hamburger + không tràn ngang |
 | Theme | sáng → tối: `.dark` + `color-scheme` + `localStorage['kb.theme']` |
 | Lịch sử | seed `localStorage` rồi reload: message + tiêu đề session còn, markdown render |
+| Lịch sử server (KB-5.2) | `localStorage` rỗng vẫn thấy hội thoại từ `GET /conversations` + messages nạp lazy; BE tắt ⇒ fallback `localStorage`, không trắng màn hình |
 | Sheet | `role=dialog`, focus nằm trong sheet, ESC đóng |
 | Panel Nguồn | path/snippet dài (kể cả token không dấu cách) **không được rộng hơn cột chat** |
 | 1900px | cửa sổ rộng vẫn không tràn ngang |
@@ -127,8 +128,10 @@ parity hoặc cuối ticket (`npm run test:e2e:prod`).
   ⇒ ném `ApiError` (có `code`, `requestId`, `status`).
 - `lib/errors.ts` map `code` → **message tiếng Việt** + `hint` + `retryable`; UI hiện banner đỏ kèm `code`,
   `request_id` và nút **Thử lại** (chỉ với lỗi tạm thời: `429/502/503/504`, `network_error`, `service_unavailable`).
-- `conversation_id` của BE được lưu trong `localStorage` (`kb.conversation_id`) ⇒ reload vẫn hỏi tiếp mạch;
-  **New chat** sẽ xoá id này.
+- `conversation_id` của BE được lưu trong `localStorage` (`kb.chat_sessions`, KB-4.9) và **cũng** lưu ở server
+  (KB-5.2): khi mở app, FE gọi `GET /conversations` để lấy lịch sử (**server là nguồn sự thật**); nếu BE tắt/mất
+  mạng thì dùng `localStorage`. Xoá session ⇒ `DELETE /conversations/{id}`. Nội dung lưu ở server là bản **đã
+  redact PII** nên hội thoại tải lại có thể hiện `[REDACTED:…]`.
 
 > Phần còn lại của README (proxy Python `server.fastapi_openai_proxy`, `/chat` của repo khác) là **tài liệu cũ**
 > từ thời onboarding — backend thật là `Knowledge-base/` (FastAPI, xem README repo đó). Dọn lại ở **TD-20**.

@@ -18,7 +18,17 @@ import {
     subscribeChatStore,
     type ChatSessionRecord,
 } from '@/lib/chat-store';
-import {ApiError, STREAMING_ENABLED, StreamAbortedError, postChat, streamChat} from '@/lib/api';
+import {
+    ApiError,
+    STREAMING_ENABLED,
+    StreamAbortedError,
+    deleteConversation,
+    getConversation,
+    listConversations,
+    postChat,
+    streamChat,
+} from '@/lib/api';
+import {mergeServerConversations, sessionMessagesFromDetail} from '@/lib/conversations';
 import {describeApiError, type ApiErrorView} from '@/lib/errors';
 import {phaseOf} from '@/lib/stream-phase';
 import type {ChatMessage} from '@/lib/types';
@@ -101,6 +111,66 @@ export default function ChatPage() {
     useEffect(() => {
         scrollRef.current?.scrollIntoView({behavior: 'smooth'});
     }, [messages]);
+
+    // ---- KB-5.2: lịch sử bền phía server (server = nguồn sự thật, `localStorage` = fallback) ----
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const response = await listConversations();
+                if (cancelled) return;
+                setChatStore((previous) => {
+                    const sessions = mergeServerConversations(response.conversations, previous.sessions);
+                    // Lần đầu mở trên máy khác: `localStorage` rỗng ⇒ chọn hội thoại mới nhất từ server.
+                    const currentSessionId = previous.currentSessionId
+                        ?? sessions.find((session) => session.messages.length > 0)?.id
+                        ?? sessions[0]?.id
+                        ?? null;
+                    return {...previous, currentSessionId, sessions};
+                });
+            } catch {
+                // AC3: BE tắt/mất mạng ⇒ giữ nguyên lịch sử trong `localStorage`, không báo lỗi to.
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    /**
+     * Nạp messages của 1 session đến từ server (list endpoint không trả messages).
+     * Lỗi ⇒ để trống, người dùng vẫn chat tiếp bình thường.
+     */
+    const hydrateSessionMessages = async (sessionId: string, conversationId: string) => {
+        try {
+            const detail = await getConversation(conversationId);
+            setChatStore((previous) => ({
+                ...previous,
+                sessions: previous.sessions.map((session) =>
+                    session.id === sessionId && session.messages.length === 0
+                        ? {
+                            ...session,
+                            title: detail.title || session.title,
+                            messages: sessionMessagesFromDetail(detail, sessionId),
+                            messageCount: detail.messages.length,
+                        }
+                        : session,
+                ),
+            }));
+        } catch {
+            // bỏ qua: session trống vẫn dùng được
+        }
+    };
+
+    const activeSessionId = activeSession?.id ?? null;
+    const activeConversationId = activeSession?.conversationId ?? null;
+    const activeIsEmpty = !activeSession || activeSession.messages.length === 0;
+    useEffect(() => {
+        // Session vừa được chọn/hydrate từ server mà chưa có messages ⇒ nạp 1 lần.
+        if (activeSessionId && activeConversationId && activeIsEmpty) {
+            void hydrateSessionMessages(activeSessionId, activeConversationId);
+        }
+    }, [activeSessionId, activeConversationId, activeIsEmpty]);
 
 
     /** Ghi messages của session đang mở; tự set title theo câu hỏi đầu tiên (KB-4.9). */
@@ -382,6 +452,7 @@ export default function ChatPage() {
 
     /** Xoá session; xoá session cuối cùng ⇒ tạo session trống mới (không để màn hình không có session). */
     const handleDeleteSession = (sessionId: string) => {
+        const target = store.sessions.find((session) => session.id === sessionId);
         setChatStore((previous) => {
             const sessions = previous.sessions.filter((session) => session.id !== sessionId);
             if (sessions.length === 0) {
@@ -393,6 +464,10 @@ export default function ChatPage() {
                 : sessions[0].id;
             return {...previous, currentSessionId, sessions};
         });
+        // AC2 (KB-5.2): xoá luôn ở server. Lỗi mạng **không** chặn UI — session đã biến mất ở local.
+        if (target?.conversationId) {
+            void deleteConversation(target.conversationId).catch(() => undefined);
+        }
     };
 
     // KB-4.11: pha hiện tại — 'retrieving' (chưa có `start`) → 'writing' (đã có `start`)
