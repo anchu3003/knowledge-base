@@ -38,6 +38,22 @@ class ReadinessResponse(BaseModel):
 # ------------------------------
 # Document Upload
 # ------------------------------
+class DocumentSyncResponse(BaseModel):
+    """Kết quả `POST /documents/sync` (KB-5.1) — index tăng dần từ folder."""
+
+    success: bool
+    message: str
+    added: List[str] = []
+    updated: List[str] = []
+    removed: List[str] = []
+    skipped: List[Dict[str, Any]] = []
+    unchanged: int = 0
+    total_chunks: int = 0
+    removed_chunks: int = 0
+    elapsed_ms: int = 0
+    details: Optional[List[str]] = None
+
+
 class DocumentUploadResponse(BaseModel):
     """Response model for document upload"""
     success: bool

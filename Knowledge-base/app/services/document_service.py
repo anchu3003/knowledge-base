@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import time
 import importlib
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -23,8 +24,16 @@ from langchain_text_splitters import (
 )
 
 from app.core.config import Settings
+from app.core.errors import DocumentsFolderEmptyError
 from app.core.embeddings import build_embedding_params
 from app.services.dedup import cap_per_file, dedupe_hits
+from app.services.index_sync import (
+    IndexedFile,
+    SyncPlan,
+    compute_file_digest,
+    diff_indexed,
+    scan_folder,
+)
 from app.services.pii_service import PIIRedactor, redact_texts_for_ingest
 
 logger = logging.getLogger(__name__)
@@ -195,6 +204,8 @@ class DocumentService:
                     "file_name": file_path.name,
                     "file_size": file_path.stat().st_size,
                     "chunk_index": idx,
+                    # KB-5.1: sha256 nội dung ⇒ sync so được "file trên đĩa" với "file đã index"
+                    "file_hash": compute_file_digest(file_path),
                 })
 
             return chunks
@@ -557,6 +568,143 @@ class DocumentService:
                 "status": "error",
                 "error": str(e)
             }
+
+    # ------------------------------
+    # KB-5.1 — index tăng dần từ folder (file mới / sửa / xoá)
+    # ------------------------------
+
+    def indexed_files(self) -> Dict[str, IndexedFile]:
+        """Đọc metadata collection ⇒ `{source: IndexedFile(digest, size)}`.
+
+        Mọi chunk của một file chia sẻ cùng `file_hash`/`file_size` ⇒ chỉ lấy bản ghi đầu tiên.
+        """
+        files: Dict[str, IndexedFile] = {}
+        try:
+            found = self.collection.get(include=["metadatas"])
+        except Exception as exc:  # pragma: no cover - Chroma lỗi
+            logger.warning(f"indexed_files: cannot read collection: {exc}")
+            return files
+
+        for meta in found.get("metadatas") or []:
+            if not isinstance(meta, dict):
+                continue
+            source = meta.get("source")
+            if not source or source in files:
+                continue
+            digest = meta.get("file_hash")
+            size = meta.get("file_size")
+            files[str(source)] = IndexedFile(
+                source=str(source),
+                digest=str(digest) if digest else None,
+                size=int(size) if isinstance(size, (int, float)) else None,
+            )
+        return files
+
+    def delete_file_chunks(self, source: str) -> int:
+        """Xoá toàn bộ chunk của một file (theo metadata `source`) — file đổi/xoá (KB-5.1)."""
+        try:
+            existing = self.collection.get(where={"source": source}, include=[])
+            ids = existing.get("ids") or []
+            if not ids:
+                return 0
+            self.collection.delete(ids=ids)
+            return len(ids)
+        except Exception as exc:  # pragma: no cover
+            logger.warning(f"delete_file_chunks({source}): {exc}")
+            return 0
+
+    def backfill_file_digests(self, files: List[Any]) -> int:
+        """Ghi `file_hash` cho file index từ bản trước KB-5.1 (cùng size ⇒ không cần embed lại)."""
+        updated = 0
+        for disk in files:
+            try:
+                found = self.collection.get(where={"source": disk.path}, include=["metadatas"])
+            except Exception:  # pragma: no cover
+                continue
+            ids = found.get("ids") or []
+            metas = found.get("metadatas") or []
+            if not ids:
+                continue
+            new_metas = [{**(meta or {}), "file_hash": disk.digest, "file_size": disk.size} for meta in metas]
+            try:
+                self.collection.update(ids=ids, metadatas=new_metas)
+                updated += len(ids)
+            except Exception as exc:  # pragma: no cover
+                logger.warning(f"backfill_file_digests({disk.path}): {exc}")
+        return updated
+
+    async def _refresh_corpus_after_sync(self) -> None:
+        """Nạp lại corpus BM25 sau khi add/delete (TD-13: không được để corpus lệch)."""
+        try:
+            existing = self.collection.get(include=["documents", "metadatas"])
+            self._corpus_ids = existing.get("ids", []) or []
+            self._corpus_texts = existing.get("documents", []) or []
+            self._corpus_metas = existing.get("metadatas", []) or []
+            self._rebuild_bm25()
+        except Exception as exc:  # pragma: no cover
+            logger.warning(f"_refresh_corpus_after_sync: {exc}")
+
+    async def sync_documents(self) -> Dict[str, Any]:
+        """Index **tăng dần** (KB-5.1): chỉ embed file mới/đổi, xoá chunk của file đã bị xoá.
+
+        Khác `refresh` (clear + index lại tất cả): **không** gọi `clear_database()` ⇒ index cũ vẫn trả lời được
+        trong lúc sync. Trả dict đếm + tên file cho UI hiện kết quả.
+        """
+        started = time.monotonic()
+        folder = Path(self.settings.documents_folder)
+
+        disk_files, skipped = scan_folder(folder, self._supported_exts, self.settings.max_file_size_mb)
+        if not disk_files:
+            raise DocumentsFolderEmptyError(
+                f"sync_documents: folder={folder} has no supported files (skipped={len(skipped)})"
+            )
+
+        plan: SyncPlan = diff_indexed(disk_files, self.indexed_files())
+
+        removed_chunks = 0
+        for disk in plan.updated:
+            removed_chunks += self.delete_file_chunks(disk.path)
+        for source in plan.removed:
+            removed_chunks += self.delete_file_chunks(source)
+
+        documents: List[Document] = []
+        errors: List[str] = []
+        for disk in plan.to_index:
+            try:
+                documents.extend(await self._process_single_file(Path(disk.path)))
+            except Exception as exc:  # một file lỗi không làm fail cả lần sync
+                errors.append(f"{disk.path}: {type(exc).__name__}: {exc}")
+
+        if documents:
+            await self._add_documents_to_db(documents)
+
+        backfilled = self.backfill_file_digests(plan.backfill)
+        if documents or removed_chunks or backfilled:
+            await self._refresh_corpus_after_sync()
+
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        summary = {
+            "added": [Path(f.path).name for f in plan.added],
+            "updated": [Path(f.path).name for f in plan.updated],
+            "removed": [Path(s).name for s in plan.removed],
+            "skipped": skipped,
+            "unchanged": len(plan.unchanged),
+            "total_chunks": len(documents),
+            "removed_chunks": removed_chunks,
+            "elapsed_ms": elapsed_ms,
+            "details": errors,
+        }
+        logger.info(
+            "sync_documents: +%d ~%d -%d (skip %d, unchanged %d) chunks=%d in %dms",
+            len(plan.added),
+            len(plan.updated),
+            len(plan.removed),
+            len(skipped),
+            len(plan.unchanged),
+            len(documents),
+            elapsed_ms,
+        )
+        return summary
 
     async def clear_database(self):
         """Clear all documents from the database"""

@@ -131,6 +131,23 @@ class FakeDocumentService:
             raise self.error
         self.count = 0
 
+    async def sync_documents(self):
+        """KB-5.1 — fake kết quả sync để test tầng HTTP (không đụng Chroma/embedding)."""
+        self.calls.append("sync_documents")
+        if self.error is not None:
+            raise self.error
+        return {
+            "added": ["moi.md"],
+            "updated": ["sua.md"],
+            "removed": ["da-xoa.md"],
+            "skipped": [{"path": "/docs/big.md", "reason": "too_large: 12.0MB > 10MB"}],
+            "unchanged": 4,
+            "total_chunks": 6,
+            "removed_chunks": 3,
+            "elapsed_ms": 1234,
+            "details": [],
+        }
+
 
 @pytest.fixture
 def fake_chat_service() -> FakeChatService:
