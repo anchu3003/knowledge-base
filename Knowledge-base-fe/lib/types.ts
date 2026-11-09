@@ -184,3 +184,37 @@ export interface DocumentsSyncResult {
     elapsed_ms: number
     details?: string[]
 }
+
+/**
+ * Lịch sử hội thoại bền phía server (KB-5.2).
+ *
+ * `content` là bản **BE đã redact PII** trước khi lưu ⇒ reload từ server có thể thấy placeholder
+ * `[REDACTED:EMAIL]` thay cho dữ liệu thật. Đó là hành vi cố ý (không lưu PII thô).
+ */
+export interface ConversationMessage {
+    role: 'user' | 'assistant' | string
+    content: string
+    timestamp: string
+    interrupted?: boolean
+}
+
+export interface ConversationSummary {
+    id: string
+    title: string
+    created_at: string
+    updated_at: string
+    message_count: number
+}
+
+export interface ConversationsListResponse {
+    conversations: ConversationSummary[]
+    total: number
+}
+
+export interface ConversationDetail {
+    id: string
+    title: string
+    created_at: string
+    updated_at: string
+    messages: ConversationMessage[]
+}

@@ -12,6 +12,8 @@
 import type {
     ChatRequest,
     ChatResponse,
+    ConversationDetail,
+    ConversationsListResponse,
     DocumentStatus,
     DocumentsSyncResult,
     FolderInfo,
@@ -288,6 +290,37 @@ export async function syncDocuments(): Promise<DocumentsSyncResult> {
     return apiFetch<DocumentsSyncResult>('/documents/sync', {
         method: 'POST',
         signal,
+    });
+}
+
+/**
+ * Lịch sử hội thoại (KB-5.2) — server là **nguồn sự thật**, `localStorage` chỉ là cache/fallback.
+ *
+ * Timeout ngắn: đây là dữ liệu để **hiển thị sidebar**, không được để app treo khi BE chậm;
+ * hết hạn ⇒ FE giữ lịch sử trong `localStorage` (AC3).
+ */
+export const CONVERSATIONS_TIMEOUT_MS = 10_000;
+
+function conversationsSignal(): AbortSignal | undefined {
+    return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(CONVERSATIONS_TIMEOUT_MS)
+        : undefined;
+}
+
+export async function listConversations(): Promise<ConversationsListResponse> {
+    return apiFetch<ConversationsListResponse>('/conversations', {signal: conversationsSignal()});
+}
+
+export async function getConversation(conversationId: string): Promise<ConversationDetail> {
+    return apiFetch<ConversationDetail>(`/conversations/${encodeURIComponent(conversationId)}`, {
+        signal: conversationsSignal(),
+    });
+}
+
+export async function deleteConversation(conversationId: string): Promise<{ message: string }> {
+    return apiFetch<{ message: string }>(`/conversations/${encodeURIComponent(conversationId)}`, {
+        method: 'DELETE',
+        signal: conversationsSignal(),
     });
 }
 

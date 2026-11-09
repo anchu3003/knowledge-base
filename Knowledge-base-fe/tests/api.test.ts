@@ -4,10 +4,13 @@ import {
     STREAMING_ENABLED,
     StreamAbortedError,
     clearDocuments,
+    deleteConversation,
+    getConversation,
     getDocumentsStatus,
     getFolderInfo,
     getHealth,
     getReady,
+    listConversations,
     postChat,
     syncDocuments,
     streamChat,
@@ -144,6 +147,51 @@ describe('documents & health (KB-4.5)', () => {
         await expect(syncDocuments()).rejects.toMatchObject({
             code: 'document_store_error',
             requestId: 'req-5',
+        });
+    });
+});
+
+describe('conversations (KB-5.2)', () => {
+    it('list gọi GET /conversations và trả đúng shape', async () => {
+        const mock = stubFetch(async () => makeResponse(200, {
+            conversations: [{id: 'conv-1', title: 'Kafka', created_at: '', updated_at: '', message_count: 2}],
+            total: 1,
+        }));
+
+        const result = await listConversations();
+
+        expect(String(mock.mock.calls[0][0])).toContain('/conversations');
+        expect(result.total).toBe(1);
+        expect(result.conversations[0].id).toBe('conv-1');
+    });
+
+    it('getConversation encode id trên URL', async () => {
+        const mock = stubFetch(async () => makeResponse(200, {
+            id: 'conv/1', title: 't', created_at: '', updated_at: '', messages: [],
+        }));
+
+        await getConversation('conv/1');
+
+        expect(String(mock.mock.calls[0][0])).toContain('/conversations/conv%2F1');
+    });
+
+    it('deleteConversation dùng method DELETE', async () => {
+        const mock = stubFetch(async () => makeResponse(200, {message: 'Đã xoá hội thoại'}));
+
+        await deleteConversation('conv-1');
+
+        expect((mock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
+        expect(String(mock.mock.calls[0][0])).toContain('/conversations/conv-1');
+    });
+
+    it('xoá hội thoại không tồn tại ⇒ ApiError not_found (không im lặng)', async () => {
+        stubFetch(async () => makeResponse(404, {
+            error: {code: 'not_found', message: 'Resource not found.', request_id: 'req-9'},
+        }));
+
+        await expect(deleteConversation('khong-co')).rejects.toMatchObject({
+            code: 'not_found',
+            status: 404,
         });
     });
 });

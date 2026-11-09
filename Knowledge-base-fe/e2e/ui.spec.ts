@@ -484,3 +484,79 @@ test.describe('Đồng bộ tài liệu (KB-5.1)', () => {
         await page.screenshot({path: 'test-results/shot-12-sync-result.png'});
     });
 });
+test.describe('Lịch sử hội thoại bền (KB-5.2)', () => {
+    test('máy khác (localStorage rỗng) vẫn thấy hội thoại từ server + nạp messages', async ({page}) => {
+        // Server là nguồn sự thật: list + detail được stub, localStorage cố tình để trống.
+        await page.route('**/conversations', (route) =>
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    conversations: [
+                        {
+                            id: 'conv-server-1',
+                            title: 'Kafka là gì?',
+                            created_at: '2026-01-02T10:00:00',
+                            updated_at: '2026-01-02T10:05:00',
+                            message_count: 2,
+                        },
+                    ],
+                    total: 1,
+                }),
+            }),
+        );
+        await page.route('**/conversations/conv-server-1', (route) =>
+            route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    id: 'conv-server-1',
+                    title: 'Kafka là gì?',
+                    created_at: '2026-01-02T10:00:00',
+                    updated_at: '2026-01-02T10:05:00',
+                    messages: [
+                        {role: 'user', content: 'Kafka là gì?', timestamp: '2026-01-02T10:00:00'},
+                        {role: 'assistant', content: 'Là message broker phân tán.', timestamp: '2026-01-02T10:00:05'},
+                    ],
+                }),
+            }),
+        );
+
+        await page.goto('/');
+
+        // Sidebar hiện session của server (không có trong localStorage)
+        await expect(page.getByText('Kafka là gì?').first()).toBeVisible({timeout: 10_000});
+        // Messages nạp lazy từ GET /conversations/{id}
+        await expect(page.getByText('Là message broker phân tán.')).toBeVisible({timeout: 10_000});
+        await page.screenshot({path: 'test-results/shot-13-server-history.png'});
+    });
+
+    test('BE tắt (mọi endpoint lỗi) ⇒ vẫn dùng được lịch sử localStorage, không trắng màn hình', async ({page}) => {
+        await page.route('**/conversations**', (route) => route.abort('failed'));
+
+        // Có sẵn 1 session trong localStorage (như user đã chat trước đó)
+        await page.addInitScript(() => {
+            window.localStorage.setItem('kb.chat_sessions', JSON.stringify({
+                version: 1,
+                currentSessionId: 'session_local',
+                sessions: [{
+                    id: 'session_local',
+                    title: 'Hội thoại offline',
+                    createdAt: '2026-01-01T00:00:00.000Z',
+                    messageCount: 2,
+                    conversationId: 'conv-cu',
+                    messages: [
+                        {id: 'u1', role: 'user', content: 'Câu hỏi cũ của tôi'},
+                        {id: 'a1', role: 'assistant', content: 'Câu trả lời cũ'},
+                    ],
+                }],
+            }));
+        });
+
+        await page.goto('/');
+
+        await expect(page.getByText('Hội thoại offline')).toBeVisible();
+        await expect(page.getByText('Câu trả lời cũ')).toBeVisible();
+        await expect(page.getByText('Kho tài liệu')).toBeVisible(); // app vẫn render bình thường
+    });
+});
