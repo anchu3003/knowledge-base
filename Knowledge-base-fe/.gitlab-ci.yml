@@ -1,0 +1,72 @@
+# KB-5.7 — CI frontend: lint + typecheck + vitest + build + e2e (Playwright, Chromium trong image chính thức).
+#
+# ⚠️ CỜ TẮT MẶC ĐỊNH: pipeline **không được tạo** cho tới khi bật biến CI/CD `CI_ENABLED=true`.
+# Chưa bật ⇒ push/MR không tạo pipeline (hành vi như trước KB-5.7). Bật: thêm biến `CI_ENABLED=true`.
+workflow:
+  rules:
+    - if: '$CI_ENABLED == "true"'
+    - when: never
+
+stages:
+  - check
+  - build
+  - e2e
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+default:
+  image: node:22-bookworm
+  interruptible: true
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .cache/npm
+
+lint-typecheck-test:
+  stage: check
+  script:
+    - npm ci --cache .cache/npm --prefer-offline
+    - npm run lint
+    - npm run typecheck
+    - npm run test
+
+build:
+  stage: build
+  needs: []
+  script:
+    - npm ci --cache .cache/npm --prefer-offline
+    - npm run build
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - .next/
+
+# e2e: e2e hiện tại **stub route** (SSE, /conversations, /documents/*) ⇒ KHÔNG cần backend/LLM/quota.
+# Dùng image chính thức của Playwright, pin đúng version trong package.json (@playwright/test 1.65.x)
+# để Chromium khớp — nếu bump Playwright thì bump cả tag image này.
+e2e:
+  stage: e2e
+  image: mcr.microsoft.com/playwright:v1.65.0-jammy
+  needs: ["build"]
+  variables:
+    # config chỉ tự bật `npm run dev` khi KHÔNG có APP_URL ⇒ set APP_URL để dùng `next start` (bản build thật)
+    APP_URL: "http://localhost:3000"
+  script:
+    - npm ci --cache .cache/npm --prefer-offline
+    - npm run build
+    - npm run start &
+    # chờ `next start` lên (tối đa 60s) — không thêm dependency `wait-on`
+    - >
+      node -e "const url='http://localhost:3000';const t=Date.now();
+      (async()=>{while(Date.now()-t<60000){try{const r=await fetch(url);if(r.ok)process.exit(0)}catch{}
+      await new Promise(s=>setTimeout(s,1000))}console.error('server không lên sau 60s');process.exit(1)})()"
+    - npm run test:e2e
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - test-results/
