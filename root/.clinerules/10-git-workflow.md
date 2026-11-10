@@ -2,10 +2,13 @@
 
 Rule behavioral. Base convention ở `AGENTS.md` §6. Vòng đời đóng ticket đã **gộp vào `/run-ticket.md`**.
 
-## Đặc thù: 2 repo riêng
+## Đặc thù: 3 repo (2 app repo + root docs repo)
 
 - `Knowledge-base/` và `Knowledge-base-fe/` là **2 git repo GitLab độc lập** (remote SSH, xem `git remote -v`
   trong từng repo — dạng `gitlab.com:anchu3003/<repo>.git`).
+- **Root là 1 git repo riêng** (từ 2026-11-10): track `AGENTS.md`, `architecture.md`, `Backlog.md`, `README.md`,
+  `docs/`, `tools/`, `.cline*`; **ignore** 2 folder repo con. Commit tài liệu root bằng
+  `git -C <root> commit ...` — cùng commit message + ticket ID, nhưng **không** tạo MR (chưa có remote).
 - Một ticket đụng **cả 2 repo** → tạo **2 nhánh cùng tên** + **2 MR**.
 - Commit message cả 2 repo đều nhắc **cùng ticket ID**.
 

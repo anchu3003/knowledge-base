@@ -75,7 +75,7 @@ npm ci && npm run dev           # http://localhost:3000
 ## Cấu trúc source
 
 ```
-knowledge-base/                  # root: tài liệu + AI assets (KHÔNG phải git repo)
+knowledge-base/                  # root: git repo riêng — track tài liệu + AI assets (ignore 2 repo con)
 ├── README.md                    # file này — cửa vào chung
 ├── architecture.md              # hiện trạng kiến trúc (luồng dữ liệu, env, roadmap)
 ├── Backlog.md                   # ticket theo phase + tech debt (§7) + changelog
@@ -134,6 +134,24 @@ Số đo để bạn biết "nhanh hay chậm": sync **~1,2 s/file** (không đ�
 | Đang làm gì, nợ kỹ thuật, lịch sử thay đổi | [`Backlog.md`](Backlog.md) |
 | Nhật ký từng phase (có gì, cách chạy lúc đó, bài học) | [`docs/phases/`](docs/phases/) |
 | Cách làm việc với AI agent trong repo | [`AGENTS.md`](AGENTS.md) |
+
+## Repo & git
+
+| Repo | Nội dung | Remote |
+|---|---|---|
+| `Knowledge-base/` | backend | GitLab `knowledge-base-be` |
+| `Knowledge-base-fe/` | frontend | GitLab `knowlege-base-fe` |
+| root (thư mục này) | tài liệu, ADR, AI assets, `tools/` | local `main` (chưa có remote) |
+
+Root là git repo riêng và **ignore 2 folder repo con** (`.gitignore`) ⇒ không file nào bị track 2 lần.
+Commit tài liệu root độc lập với 2 repo app:
+
+```bash
+git -C . status            # root repo
+git -C Knowledge-base status        # BE repo
+git -C Knowledge-base-fe status     # FE repo
+```
+
 
 ## Điểm kỹ thuật đáng chú ý
 

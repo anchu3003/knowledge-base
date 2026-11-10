@@ -15,12 +15,16 @@
 - Ưu tiên **học đúng + dùng được cho bản thân**, không ship nhanh.
 - Người thực hiện: **bạn + AI**. Không chia role Lead/DevOps/QA — cả hai cùng làm design → code → test.
 
-Hai repo con (GitLab):
+Ba repo (2 repo app trên GitLab + 1 repo root chỉ track tài liệu/AI assets):
 
 | Thư mục | Vai trò | Stack | Remote |
 |---|---|---|---|
 | `Knowledge-base/` | Backend RAG API | Python 3.13 · FastAPI · LangChain · ChromaDB · sentence-transformers | `knowledge-base-be` |
 | `Knowledge-base-fe/` | Frontend UI | Next.js 16 · React 19 · Tailwind v4 · Radix/shadcn | `knowlege-base-fe` |
+| `./` (root) | Tài liệu + AI assets + tools | Markdown, Python tool nhỏ | local `main` (chưa có remote) |
+
+Root repo **ignore** 2 folder repo con (`.gitignore`) ⇒ không file nào bị track 2 lần.
+
 
 Tài liệu nguồn (source of truth):
 

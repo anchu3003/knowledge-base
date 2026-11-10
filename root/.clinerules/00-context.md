@@ -16,11 +16,14 @@ Không tạo `memory-bank/` riêng. `architecture.md` + `Backlog.md` đóng vai 
 
 | Thư mục | Vai trò | Stack | Git remote |
 |---|---|---|---|
-| `Knowledge-base/` | Backend API (RAG) | Python 3.11 · FastAPI · LangChain · ChromaDB | `gitlab.com:anchu3003/knowledge-base-be` |
+| `Knowledge-base/` | Backend API (RAG) | Python 3.13 · FastAPI · LangChain · ChromaDB | `gitlab.com:anchu3003/knowledge-base-be` |
 | `Knowledge-base-fe/` | Frontend UI | Next.js 16 · React 19 · Tailwind v4 · Radix/shadcn | `gitlab.com:anchu3003/knowlege-base-fe` |
-| `.clinerules/`, `.cline/`, `tools/` | AI assets + script hỗ trợ | — | (không commit secret) |
+| `./` (root) | Tài liệu + AI assets + `tools/` | Markdown, Python tool nhỏ | local `main` (chưa có remote) |
 
-> 2 thư mục là **2 git repo riêng** (GitLab). Root `Kb-khoa-hoc` **không** phải git repo — AI assets nằm ở root, không commit vào repo con.
+
+> 2 thư mục là **2 git repo riêng** (GitLab). Root `knowledge-base` **cũng là 1 git repo riêng** (từ
+> 2026-11-10) — track tài liệu/AI assets/tools ở root, **ignore** 2 folder repo con (`.gitignore`), nên không
+> file nào bị track 2 lần.
 
 ## Nhắc nhanh (chi tiết xem `AGENTS.md`)
 

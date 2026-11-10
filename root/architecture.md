@@ -49,15 +49,20 @@ Vector store: ChromaDB (local, ./chroma_db)
 
 ---
 
-## 3. Hai repo
+## 3. Ba repo (2 app repo + root docs repo)
 
-| | Backend | Frontend |
-|---|---|---|
-| Thư mục | `Knowledge-base/` | `Knowledge-base-fe/` |
-| Stack | Python 3.13 · FastAPI · LangChain · ChromaDB | Next.js 16 · React 19 · TS · Tailwind v4 · shadcn |
-| Port dev | `8000` | `3000` |
-| Remote | `gitlab.com:anchu3003/knowledge-base-be` | `gitlab.com:anchu3003/knowlege-base-fe` |
-| Điểm vào | `app/main.py` | `app/page.tsx`, `app/chat/page.tsx`, `app/login/page.tsx` |
+| | Backend | Frontend | Root (docs/AI assets) |
+|---|---|---|---|
+| Thư mục | `Knowledge-base/` | `Knowledge-base-fe/` | `./` (chính workspace) |
+| Stack | Python 3.13 · FastAPI · LangChain · ChromaDB | Next.js 16 · React 19 · TS · Tailwind v4 · shadcn | Markdown + Python tools |
+| Port dev | `8000` | `3000` | — |
+| Remote | `gitlab.com:anchu3003/knowledge-base-be` | `gitlab.com:anchu3003/knowlege-base-fe` | local `main` (chưa có remote) |
+| Nội dung | `app/`, `tests/`, `eval/`, Dockerfile | `app/`, `components/`, `lib/`, `tests/`, `e2e/` | `AGENTS.md`, `architecture.md`, `Backlog.md`, `README.md`, `docs/`, `tools/`, `.cline*` |
+| Điểm vào | `app/main.py` | `app/page.tsx` | `README.md` |
+
+Root repo **ignore** 2 folder repo con (`.gitignore`: `Knowledge-base/`, `Knowledge-base-fe/`) ⇒ không file
+nào bị track 2 lần; mọi thay đổi code vẫn commit ở repo tương ứng.
+
 
 ### 3.1 Môi trường dev — WSL2 (KB-7.1)
 
