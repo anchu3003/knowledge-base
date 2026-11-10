@@ -498,7 +498,7 @@ export default function ChatPage() {
         <div className="flex h-svh flex-col overflow-hidden bg-background">
             <AppHeader
                 onOpenDocuments={() => setShowDocumentsPanel(true)}
-                renderSidebar={(close) => <SidebarContent {...sidebarProps} onAfterAction={close}/>}
+                renderSidebar={(close) => <SidebarContent {...sidebarProps} onAfterAction={close} onClose={close}/>}
                 sessionCount={store.sessions.length}
             />
             <DocumentsPanel open={showDocumentsPanel} onClose={() => setShowDocumentsPanel(false)}/>
