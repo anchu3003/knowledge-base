@@ -28,7 +28,6 @@ import type {
     FolderInfo,
     ReadinessStatus,
 } from '@/lib/types';
-import {SettingsPanel} from '@/components/settings-panel';
 import {Button} from '@/components/ui/button';
 import {Sheet, SheetContent, SheetTitle} from '@/components/ui/sheet';
 import {CheckCircle2, Database, RefreshCw, Stethoscope, Trash2, X, XCircle} from 'lucide-react';
@@ -134,8 +133,6 @@ export interface DocumentsPanelContentProps {
     onSync: () => void;
     /** TD-23: gọi `/ready?deep=true` — kiểm provider thật (tốn 1 request `max_tokens=1`). */
     onCheckProvider: () => void;
-    /** KB-9.4: lỗi khi lưu cấu hình runtime (báo chung banner). */
-    onSettingsError: (view: ApiErrorView | null) => void;
 
     onAskClear: () => void;
     onCancel: () => void;
@@ -185,7 +182,6 @@ export function DocumentsPanelContent({
                                            onClose,
                                            onSync,
                                            onCheckProvider,
-                                           onSettingsError,
 
                                            onAskClear,
                                            onCancel,
@@ -291,9 +287,6 @@ export function DocumentsPanelContent({
                         </section>
                     )}
 
-
-                    {/* KB-9.4: cấu hình chỉnh lúc chạy (GET/PUT /settings) */}
-                    <SettingsPanel onError={onSettingsError}/>
 
                     {actionError && <ErrorBox view={actionError}/>}
 
@@ -523,7 +516,6 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
                     onClose={onClose}
                 onSync={() => void handleSync()}
                 onCheckProvider={() => void handleCheckProvider()}
-                onSettingsError={setActionError}
                 onAskClear={() => {
                     setActionError(null);
                     setSyncResult(null);

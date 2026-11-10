@@ -5,6 +5,7 @@ import {useCallback, useEffect, useRef, useState, useSyncExternalStore} from 're
 import {AppHeader} from '@/components/app-header';
 import {SidebarContent, type ChatSession} from '@/components/app-sidebar';
 import {ChatComposer} from '@/components/chat-composer';
+import {SettingsPanel} from '@/components/settings-panel';
 import {ChatMessages, type CitationFocus} from '@/components/chat-messages';
 import {DocumentsPanel} from '@/components/documents-panel';
 import {ErrorBanner} from '@/components/error-banner';
@@ -558,6 +559,7 @@ function ChatPageInner() {
                         onUseServerDefaults={() => setAnswerSettings({maxTokens: null, temperature: null})}
                         usingServerDefaults={maxTokens === null && temperature === null}
                         maxTokensLimit={{min: MAX_TOKENS_MIN, max: MAX_TOKENS_MAX}}
+                        systemSettings={<SettingsPanel onError={setApiError}/>}
 
                         model={typeof activeModel === 'string' ? activeModel : undefined}
                     />

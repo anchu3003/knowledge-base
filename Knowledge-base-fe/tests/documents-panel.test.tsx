@@ -31,7 +31,6 @@ const baseProps = {
     onCancel: vi.fn(),
     onConfirmClear: vi.fn(),
     onClearInputChange: vi.fn(),
-    onSettingsError: vi.fn(),
 } as const;
 
 describe('DocumentsPanelContent (KB-4.5)', () => {
