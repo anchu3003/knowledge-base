@@ -114,6 +114,33 @@ test.describe('Shell & layout', () => {
         await page.screenshot({path: 'test-results/shot-01-home.png'});
     });
 
+    test('ngăn kéo: brand ở trên, nút đóng nằm trong khung và không đè nút Tạo mới (KB-5.12)', async ({page}) => {
+        await page.route('**/conversations', (route) =>
+            route.fulfill({status: 200, contentType: 'application/json',
+                body: JSON.stringify({conversations: [], total: 0})}),
+        );
+        await page.goto('/');
+        await page.getByRole('button', {name: 'Mở lịch sử trò chuyện'}).click();
+
+        const drawer = page.getByRole('dialog');
+        const closeButton = drawer.getByRole('button', {name: 'Đóng lịch sử'});
+        const newChat = drawer.getByRole('button', {name: /Cuộc trò chuyện mới/});
+        await expect(drawer.getByText('Knowledge Base')).toBeVisible();
+        await expect(closeButton).toBeVisible();
+
+        const [drawerBox, closeBox, newChatBox] = await Promise.all([
+            drawer.boundingBox(), closeButton.boundingBox(), newChat.boundingBox(),
+        ]);
+        // nút đóng nằm trong khung ngăn kéo
+        expect(closeBox!.x + closeBox!.width).toBeLessThanOrEqual(drawerBox!.x + drawerBox!.width + 0.5);
+        // và ở HÀNG TRÊN nút "Cuộc trò chuyện mới" (bug cũ: nút X mặc định đè lên nút này)
+        expect(closeBox!.y + closeBox!.height).toBeLessThanOrEqual(newChatBox!.y + 0.5);
+
+        await closeButton.click();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+        await page.screenshot({path: 'test-results/shot-15-drawer-closed.png'});
+    });
+
     test('720px: không cột sidebar, ngăn kéo Lịch sử mở được, không tràn ngang', async ({page}) => {
         await page.setViewportSize({width: 720, height: 900});
         await page.goto('/');

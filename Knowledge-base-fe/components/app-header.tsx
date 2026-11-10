@@ -48,7 +48,9 @@ export function AppHeader({onOpenDocuments, renderSidebar, sessionCount}: AppHea
                             )}
                         </Button>
                     </SheetTrigger>
-                    <SheetContent side="left" className="w-72 p-0">
+                    {/* KB-5.12: ẩn nút X mặc định — nó bị đặt absolute và đè lên nút "Cuộc trò chuyện mới".
+                        Nút đóng riêng nằm trong header của ngăn kéo (app-sidebar). */}
+                    <SheetContent side="left" showCloseButton={false} className="w-72 p-0">
                         <SheetTitle className="sr-only">Danh sách cuộc trò chuyện</SheetTitle>
                         {renderSidebar(() => setSidebarOpen(false))}
                     </SheetContent>

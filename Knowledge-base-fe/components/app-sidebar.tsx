@@ -1,6 +1,6 @@
 'use client';
 
-import {MessageSquare, Plus, Trash2} from 'lucide-react';
+import {MessageSquare, Plus, Trash2, X} from 'lucide-react';
 
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -31,6 +31,10 @@ export interface SidebarContentProps {
     onDeleteSession: (sessionId: string) => void;
     /** Đóng ngăn kéo sau khi chọn (Sheet luôn truyền) */
     onAfterAction?: () => void;
+    /**
+     * Đóng ngăn kéo bằng nút X ở header (KB-5.12). Không truyền (test component) ⇒ không render nút.
+     */
+    onClose?: () => void;
 }
 
 export function SidebarContent({
@@ -40,6 +44,7 @@ export function SidebarContent({
                                    onNewChat,
                                    onDeleteSession,
                                    onAfterAction,
+                                   onClose,
                                }: SidebarContentProps) {
     const handle = (action: () => void) => () => {
         action();
@@ -48,7 +53,29 @@ export function SidebarContent({
 
     return (
         <div className="flex h-full flex-col bg-sidebar">
-            <div className="p-3 pb-2">
+            {/* KB-5.12: header riêng của ngăn kéo — brand bên trái, nút đóng bên phải, cùng 1 hàng.
+                Trước đây nút X mặc định của Radix `Sheet` nằm `absolute` nên đè lên nút "Cuộc trò chuyện mới". */}
+            <div className="flex h-14 shrink-0 items-center justify-between px-3">
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
+                        KB
+                    </span>
+                    <span className="truncate text-sm font-semibold text-foreground">Knowledge Base</span>
+                </div>
+                {onClose && (
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={onClose}
+                        aria-label="Đóng lịch sử"
+                        title="Đóng"
+                    >
+                        <X className="size-4"/>
+                    </Button>
+                )}
+            </div>
+
+            <div className="px-3 pb-2">
                 <Button className="w-full justify-start gap-2" onClick={handle(onNewChat)}>
                     <Plus className="size-4"/>
                     Cuộc trò chuyện mới

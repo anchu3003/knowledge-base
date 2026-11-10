@@ -131,6 +131,27 @@ describe('SidebarContent (KB-4.8)', () => {
         expect(container.innerHTML).not.toMatch(/\bborder-border\b/);
     });
 
+    it('header ngăn kéo: brand ở trên, nút đóng chỉ render khi có onClose (KB-5.12)', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        const {unmount} = renderSidebar({onClose});
+
+        expect(screen.getByText('Knowledge Base')).toBeInTheDocument();
+        const close = screen.getByRole('button', {name: 'Đóng lịch sử'});
+        await user.click(close);
+        expect(onClose).toHaveBeenCalledOnce();
+
+        // thứ tự DOM: brand đứng trước "Lịch sử"
+        const brand = screen.getByText('Knowledge Base');
+        const history = screen.getByText('Lịch sử');
+        expect(brand.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        // không truyền onClose ⇒ không có nút đóng
+        unmount();
+        renderSidebar();
+        expect(screen.queryByRole('button', {name: 'Đóng lịch sử'})).not.toBeInTheDocument();
+    });
+
     it('rỗng thì hiện empty state + nút chat mới', async () => {
         const user = userEvent.setup();
         const onNewChat = vi.fn();
