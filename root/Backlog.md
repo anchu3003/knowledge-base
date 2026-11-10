@@ -6,7 +6,7 @@
 > ⚠️ **Khôi phục 2026-11-08**: file này bị truncate khi ghi script; dựng lại từ VS Code local history + `docs/phases/*`.
 > Ticket Phase 0/1/2/6/7 giữ nguyên văn; **Phase 2–4 viết lại dạng rút gọn** (chi tiết ở `docs/phases/phase-N.md`); **TD-20** mất mô tả gốc.
 
-**Ticket đang làm:** _(trống — Phase 9 xong 2/2; chất lượng câu trả lời đã cải thiện, còn 2 việc đề xuất trong §4c)_
+**Ticket đang làm:** _(trống — Phase 9: 3/4; KB-9.4 chờ trả lời Q&A trong §4c)_
 **Ticket tiếp theo:** **KB-8.1** (ADR backfill #1 — bản học tập sâu) — Q&A đã chốt (Q1=B sâu · Q2=A đủ 16 · Q3=B ôn tập ở README · Q4=không bản EN) ⇒ **chạy được ngay**; nợ mở đáng làm: **TD-29** (top-N=4: MRR 1,0 + 2,0 s), **TD-9** (image 16,5 GB), **TD-18/19/27** (S)
 
 ---
@@ -65,7 +65,7 @@ RAG + UI.
 | 7 | Dev env: migrate sang WSL (Windows sạch) | 1 / 1 | ✅ Done |
 | 5b | **Trả nợ kỹ thuật (TD sweep)** — embedding fp32 · rate limit · startup sync nền · UI check provider | **4 / 4** | ✅ **Done** — KB-5.14→5.17; 4 TD trả, 4 TD **Skip** có điều kiện |
 | 8 | Tài liệu & học tập (17 ADR + index học + 3 README) | **8 / 8** | ✅ **Done** — 8.1→8.8 (17 ADR, 28 câu ôn tập, README root/BE/FE) |
-| 9 | **Chất lượng câu trả lời** (chẩn đoán model-vs-RAG · config tham số · UI control) | **2 / 2** | ✅ **Done** — 9.1 (BE) + 9.2 (FE); còn 2 việc đề xuất: hub-file, làm mới bộ eval |
+| 9 | **Chất lượng câu trả lời** (chẩn đoán model-vs-RAG · config · UI control · nguồn thu gọn · ngưỡng liên quan) | **3 / 4** | 🟦 9.1 ✅ · 9.2 ✅ · 9.3 ✅ · **9.4 Todo — chờ trả lời Q&A** |
 
 ---
 
@@ -2850,7 +2850,116 @@ request thật**: chỉ gửi field đã đổi, lưu qua reload, reset về nul
 
 **MR**: FE [!30](https://gitlab.com/anchu3003/knowlege-base-fe/-/merge_requests/30)
 
-### Còn mở (đề xuất ticket kế)
+### KB-9.3 — Nguồn tự thu gọn + mở bằng chip `[S1]` (FE)
+
+| Trường | Giá trị |
+|---|---|
+| Trạng thái | Done |
+| Phase | 9 |
+| Repo | FE (`Knowledge-base-fe`) |
+| Phụ thuộc | KB-4.3 (panel nguồn), KB-5.6 (render sau `end`) |
+| Ước lượng | S |
+
+**Bối cảnh** — Panel nguồn hiện **luôn mở**: mỗi câu trả lời đẩy 3–6 card (path + snippet 400 ký tự +
+score) xen giữa các message ⇒ danh sách chat dài, câu trả lời trước bị đẩy xa, và với corpus 2.879 chunk
+thì số nguồn mỗi câu tăng (`RETRIEVAL_K=6`). Người dùng thường **không** cần đọc nguồn, chỉ cần biết có
+nguồn nào; khi cần thì đã có chip `[S#]` trong câu trả lời.
+
+**Mục tiêu** — Nguồn **thu gọn mặc định**, mở bằng 1 nút; và mở **đúng card** khi bấm chip `[S#]`.
+
+**In scope**
+- `SourcesPanel`: header thành **nút bật/tắt** (`aria-expanded` + `aria-controls`), mặc định **đóng**;
+  khi đóng chỉ hiện 1 dòng tóm tắt (tên file đầu tiên + `+N`) thay vì 3–6 card.
+- Bấm chip `[S#]` trong câu trả lời ⇒ panel của message đó **tự mở** + scroll + highlight card (đã có sẵn
+  cơ chế `highlightCitationId`/`highlightNonce`; chỉ cần auto-open).
+- Nút "Xem thêm/Thu gọn" snippet vẫn hoạt động như cũ khi panel mở.
+
+**Out of scope** — Đổi dữ liệu `sources` từ BE; dedup theo file (đã chốt ở KB-4.3: không dedup); lưu
+trạng thái đóng/mở giữa các phiên.
+
+**Acceptance Criteria**
+- [x] Mặc định panel **đóng**; chỉ thấy header "Nguồn (N)" (bấm được, có `aria-expanded=false`).
+- [x] Bấm header ⇒ mở/đóng, card hiện/ẩn đúng; bấm lần nữa đóng lại.
+- [x] Bấm chip `[S2]` khi panel đang đóng ⇒ panel mở + card `S2` được highlight.
+- [x] Có test component cho 3 hành vi trên + e2e cập nhật (các case đang giả định panel luôn mở).
+- [x] Không đổi layout: panel vẫn `w-full min-w-0`, không tràn ngang ở 720/1440/1900 px.
+
+**Q&A (trả lời trước khi làm)**
+- Q1: Hành vi mong muốn: (a) chỉ auto-collapse + nút expand, (b) chỉ mở khi bấm `[S#]`, hay (c) cả hai?
+  → **(c) cả hai** — auto-collapse mặc định **và** bấm `[S#]` thì mở đúng card (user: *"auto collapse, và
+  có nút expand…, hoặc mở ra khi user bấm vào icon S1, S2"*).
+- Q2: Khi đóng, có cần hiện tóm tắt (tên file) không, hay chỉ dòng "Nguồn (N)"?
+  → **Có tóm tắt 1 dòng** (tên file đầu + `+N`) để biết nguồn nào mà không phải mở.
+
+**Giả định** — Trạng thái đóng/mở là **state của từng message** (không lưu `localStorage`); message cũ
+giữ trạng thái trong phiên hiện tại.
+
+**Kết quả verify** (output thật)
+
+```
+$ npm run test            → 144 passed (144)   (trước: 142; +2 case panel: mặc định đóng, mở/đóng)
+$ npm run lint            → 0 error/warning
+$ npm run typecheck       → sạch
+$ npm run build           → ✓ Compiled successfully in 3.4s
+$ APP_URL=:3010 npx playwright test → 18 passed (18.7s)   (trước 17; +1 case thu gọn/mở bằng chip)
+```
+
+Case e2e mới kiểm trên UI thật: mặc định `aria-expanded=false` + tóm tắt `Saga Pattern.md +1`, **không** có
+card ⇒ bấm nút mở ra 2 card ⇒ bấm lại đóng ⇒ bấm chip `[S1]` trong câu trả lời thì panel **tự mở** và card
+`S1` có `ring-2`. Ảnh: `test-results/shot-16-sources-collapsed.png`, `shot-17-sources-opened-by-chip.png`.
+
+2 lỗi tự tìm khi làm:
+1. `setState` trong effect (lint `react-hooks/set-state-in-effect`) ⇒ chuyển sang **derive** trạng thái mở.
+2. Derive đơn giản (`manualOpen ?? highlight`) làm panel **không mở lại** khi user đã tự đóng rồi bấm chip
+   ⇒ ghi `nonce` kèm lần bấm nút: highlight **mới** (nonce khác) thắng trạng thái đóng.
+**Learning note** — Trạng thái "mở/đóng" có **2 nguồn điều khiển** (nút của user vs. bấm chip trong câu trả lời) ⇒ phải có **thứ tự ưu tiên** rõ ràng, nếu không sinh bug "bấm chip không mở" — chỉ e2e bắt được, vì unit test dùng `rerender` không tái hiện ca "đã đóng bằng tay rồi mới bấm chip". Cách gọn: so **nonce** của lần bấm nút với nonce của highlight. Bài học phụ: thêm panel collapsible làm **vỡ 3 e2e cũ** (giả định panel luôn mở) ⇒ thêm helper `expandSources()` thay vì sửa từng assert.
+
+### KB-9.4 — Ngưỡng liên quan: bỏ nguồn điểm thấp, để AI tự trả lời (BE + FE)
+
+| Trường | Giá trị |
+|---|---|
+| Trạng thái | Todo — **chờ trả lời Q&A** |
+| Phase | 9 |
+| Repo | BE (`Knowledge-base`) + FE (`Knowledge-base-fe`) |
+| Phụ thuộc | KB-9.1 (đã nới `RETRIEVAL_K=6`) |
+| Ước lượng | M |
+
+**Bối cảnh** — Sau KB-9.1, mỗi câu lấy **6 chunk**. Đo thực tế: `precision@k` chỉ **0,617** ⇒ gần 40% chunk
+trong context là **nhiễu**; chunk nhiễu vừa chiếm context window vừa làm model bám vào bằng chứng kém.
+Câu hỏi ngoài phạm vi tài liệu cũng có thể vẫn "có nguồn" (điểm thấp) ⇒ câu trả lời gượng ép.
+
+**Mục tiêu** — Có **ngưỡng điểm** phía BE: nguồn dưới ngưỡng bị **loại khỏi context** (và khỏi danh sách
+nguồn); nếu **không còn nguồn nào** ⇒ model trả lời bằng kiến thức chung và **nói rõ** là không có trong
+knowledge base (prompt đã có luật này — ADR-0007/prompt hiện tại).
+
+**In scope (dự kiến)**
+- `RELEVANCE_MIN_SCORE` (env) áp lên **rerank score** (logits cross-encoder — đại lượng duy nhất đo được
+  "liên quan" sau rerank); log số nguồn bị loại.
+- Prompt: khi context rỗng ⇒ nhánh "không có trong KB" (đã có) + không được bịa `[S#]`.
+- FE: hiện nhãn nhỏ "đã bỏ N nguồn điểm thấp" (metadata) để người dùng biết vì sao ít nguồn.
+
+**Out of scope** — Đổi rerank model; lọc trước rerank (dense threshold — đã chốt `SIMILARITY_THRESHOLD=0`
+ở ADR-0005, xem lại thì mở ticket riêng).
+
+**Acceptance Criteria (dự kiến)**
+- [ ] Có số đo **trước/sau** trên bộ vàng: `precision@k`, số nguồn/câu, tỉ lệ câu "không có trong KB".
+- [ ] Câu hỏi ngoài phạm vi (vd "giá vàng hôm nay") ⇒ **0 nguồn** + câu trả lời nói rõ không có trong KB.
+- [ ] Câu hỏi trong phạm vi ⇒ **không** mất nguồn đúng (đo trên 20 câu vàng).
+- [ ] `[S#]` trong câu trả lời luôn khớp danh sách nguồn còn lại (không nhãn mồ côi).
+
+**Q&A (trả lời trước khi làm)**
+- Q1: Ngưỡng đặt trên **score nào** — rerank logits (hiện `relevance_score` trả về FE) hay score hybrid
+  đã chuẩn hoá? Giá trị khởi điểm bao nhiêu (đề xuất: đo phân bố trên 20 câu vàng rồi chọn, không đoán)?
+  →
+- Q2: Khi **tất cả** dưới ngưỡng: (a) trả lời bằng kiến thức chung + ghi rõ "không có trong KB", (b) chỉ
+  nói "không có trong knowledge base", hay (c) vẫn trả lời nhưng ẩn nguồn?
+  →
+- Q3: Có hiện số nguồn bị loại trên UI không, hay ẩn hoàn toàn?
+  →
+
+**Giả định** — Ngưỡng phải **đo** từ `eval/runs` (không đặt số theo cảm giác — bài học ADR-0010).
+
+
 
 - **Hub-file pollution**: top-k bị các file Q&A/index lớn (`Microservices Q&A.md`, `Junior/Middle Java
   Interview.md`) chiếm chỗ; cần luật xếp hạng/loại trừ file hub.
@@ -2924,6 +3033,7 @@ so sánh **kích thước với cột chuẩn** (composer). Và `getByText(strin
 | 2026-11-10 | KB-5.14→5.17 (TD sweep) | **bf16 trên CPU là bẫy im lặng**: PyTorch emulate bf16 nên chậm hơn float32 **3–4×** mà không lỗi gì — chỉ phát hiện khi đo. `torch_dtype` phải nằm **lồng** trong `model_kwargs` của LangChain (vì nó chuyển tiếp cho `SentenceTransformer(model_kwargs=…)`), không phải ở cấp ngoài. **Đổi dtype ⇒ phải re-index toàn bộ** (vector khác không gian). **Middleware dựng lúc import bind chết default argument** ⇒ muốn test bật/tắt cờ phải resolve settings **lúc gọi** (`current_settings()`), không phải `get_settings` trong signature. **`global` trong `lifespan`**: gán biến module mà quên `global` chỉ tạo biến local ⇒ test (gắn state trực tiếp) vẫn xanh nhưng runtime `/ready` thiếu check — **verify runtime bắt lỗi mà unit test bỏ sót**. **Skip cũng là kết quả**: 4 món nợ (TD-17/24-deploy/28/30) được đóng bằng điều kiện revisit verify được, thay vì để mở vô thời hạn. |
 | 2026-11-10 | KB-8.1→8.8 (Phase 8) | **ADR backfill chỉ đáng khi có số**: mỗi ADR 90–120 dòng, dẫn tên run `eval/runs/*.json` chứ không "đã đo"; cột **phương án bị loại** + mục **anti-pattern** giữ được phần dễ mất nhất khi kể lại. **Audit tài liệu bằng script, không bằng mắt**: so `config.py` alias ↔ `.env.example` bắt được 2 biến **chết** (`APP_NAME`, `APP_VERSION`) + 1 biến **thiếu** (`OPENAI_API_VERSION`); so `ls docs/adr/*.md` với số dòng bảng index để chặn lỗi thiếu dòng. **Tài liệu cũ nguy hiểm hơn không có tài liệu**: README FE còn dạy cài backend của repo khác ⇒ phải **thay hẳn**, không để "phần cũ". **Port ghi theo ngữ cảnh** (dev 3000/8000 vs compose 3010/8010) — 1 con số là nguồn lỗi muôn thuở. Ảnh Playwright dùng lại được làm ảnh README (660K), không cần tool chụp riêng. |
 | 2026-11-10 | Repo root | **"Không phải git repo" là quyết định, không phải sự thật** — nó chỉ đúng chừng nào tài liệu còn ít; khi 43 file tài liệu (17 ADR + phase + AI assets) không thuộc repo nào thì mất lịch sử + không review được. Tách repo root **ignore** 2 repo con là cách duy nhất giữ "1 file chỉ ở 1 repo" (submodule thì phải commit concurrency; copy thì trùng). `pii_scan` báo SSH URL dạng `<ssh-user>@gitlab.com` là email ⇒ **false positive của scanner**, sửa bằng cách viết lại câu (không tắt cảnh báo). Dọn `test-results/`/`.next/` an toàn vì tái sinh được; **không** dọn `.venv` (5,9 GB nhưng cần cho dev) và `chroma_db` (dữ liệu thật). |
+| 2026-11-10 | KB-9.3 | **State "mở/đóng" có 2 nguồn điều khiển phải có thứ tự ưu tiên**: nút của user vs. bấm chip `[S#]`; derive đơn giản (`manualOpen ?? highlight`) sinh bug "đã đóng tay rồi bấm chip không mở" — sửa bằng cách ghi **nonce** kèm lần bấm nút (highlight mới thắng). **Unit test không bắt được**: chỉ e2e mới tái hiện đúng chuỗi "đóng tay → bấm chip". **Thêm panel collapsible làm vỡ 3 e2e cũ** (giả định panel luôn mở) ⇒ thêm helper `expandSources()` thay vì sửa từng assert. **`setState` trong effect bị lint chặn** ⇒ derive state thay vì set trong effect. |
 
 ## 7. Technical debt register
 
@@ -3039,3 +3149,4 @@ persist, Sheet focus/ESC, nguồn không tràn, 1900px) + ảnh chụp để t�
 | 2026-11-10 | **TD sweep (Phase 5b, KB-5.14→5.17)** — làm hết những gì làm được, phần còn lại đánh **Skip**. **KB-5.14** (TD-14): `EMBEDDING_TORCH_DTYPE=float32` + `EMBEDDING_BATCH_SIZE` vào `encode_kwargs` ⇒ 601 chunk thật **436,8 s (7,3 phút)** vs ~22 phút (**~3×**; microbench 4,3×), dtype xác nhận `torch.float32`. **KB-5.15** (TD-20): `app/core/rate_limit.py` — sliding window theo IP cho `/chat` + `/chat/stream`, 429 + `Retry-After` + envelope KB-3.1, cờ `RATE_LIMIT_ENABLED` **TẮT** mặc định, 13 test. **KB-5.16** (TD-25): `StartupSyncState` + `asyncio.create_task` (`STARTUP_SYNC_BACKGROUND=true`) ⇒ `/health` 200 sau **5,6 s**, trạng thái sync ở `/ready` + `/documents/status`; bắt được bug `global` khi verify runtime. **KB-5.17** (TD-23 phần UI): `getReady({deep})` + nút **Kiểm tra provider** + render **mọi** check. **Skip**: TD-17 (1 worker là chủ ý), TD-24 phần registry/deploy (chưa có đích deploy), TD-28 (cache dẫn xuất, 1 người dùng), TD-30 (LLM-split đổi lấy thứ đã bão hoà), % tiến trình sync (cần SSE job). Test: BE **293 → 320**, FE **130 → 132**. |
 | 2026-11-10 | **Phase 8 — Tài liệu & học tập (KB-8.1→8.8, Done 8/8)**: backfill **16 ADR** (`0002`→`0017`) theo bản **học tập sâu** (Context → Options có phương án bị loại → Decision → **bảng số đo thật** dẫn `eval/runs/` → **anti-pattern** → Consequences → **"nếu làm lại thì khác gì"** → Revisit định lượng). Thêm `docs/adr/README.md`: bảng tra 17 ADR + **3 lộ trình đọc** (người mới · ôn phỏng vấn backend · vận hành) + **28 câu ôn tập** có đáp án ngắn + ADR nguồn. Nối ADR vào `architecture.md` (6 link) + `AGENTS.md` §10. Viết **README root** (182 dòng, kiểu portfolio: sơ đồ ASCII, port table, quickstart 2 cách, cấu trúc source, luồng dữ liệu, "tài liệu ở đâu", điểm kỹ thuật + giới hạn, troubleshooting, 5 ảnh chụp). Viết lại **README BE** (env audit 63 alias ↔ `.env.example` khớp 100% sau khi bỏ `APP_NAME`/`APP_VERSION` chết + thêm `OPENAI_API_VERSION`; bảng 13 endpoint; **Sync vs Refresh**; lịch sử hội thoại; 320 test; troubleshooting mới) và **README FE** (bỏ hẳn tài liệu onboarding cũ `fastapi_openai_proxy`, sửa dòng lặp/port, thêm Kho tài liệu · Lịch sử · Streaming render, bảng **16** e2e). `pii_scan` sạch 21 file · 0 link hỏng. |
 | 2026-11-10 | **Repo root + dọn dẹp**: root `knowledge-base` thành **git repo riêng** (`git init -b main`) track **43 file** chưa repo nào track: `AGENTS.md`, `architecture.md`, `Backlog.md`, `README.md`, `docs/` (17 ADR + 5 phase note), `tools/`, `.cline/`, `.clinerules/`. `.gitignore` **ignore 2 folder repo con** (`Knowledge-base/`, `Knowledge-base-fe/`) + `**/.venv`, `**/node_modules`, `**/.next`, `**/test-results`, `**/chroma_db`, `.env*` ⇒ không track trùng, không commit secret. Thêm `.gitattributes` (`* text=auto eol=lf`) như 2 repo con. Sửa lại tài liệu còn ghi "root KHÔNG phải git repo" (`AGENTS.md` §1, `.clinerules/00-context.md`, `.clinerules/10-git-workflow.md`, `architecture.md` §3, `README.md`) thành **3 repo**. **Dọn dẹp**: xoá 28 file tạm trong `/tmp` (`kb*.py`, `td*.py`, `mr_*.md`, log), `Knowledge-base-fe/test-results/` (1,7 MB, tự sinh lại), ảnh cũ `/mnt/c/Temp/kb-ui-*.png`; sửa false positive của `pii_scan` (`git@` SSH URL trong rule → viết lại không còn dạng email) ⇒ scan **43/43 file sạch**. |
+| 2026-11-10 | **KB-9.3 — Nguồn thu gọn (FE)**: panel nguồn giờ **đóng mặc định**, header thành nút (`aria-expanded`/`aria-controls`), khi đóng chỉ 1 dòng tóm tắt (`Saga Pattern.md +1`); bấm nút để mở/đóng; bấm chip `[S#]` trong câu trả lời ⇒ panel **tự mở** đúng card + highlight (giữ KB-4.3). Kèm 2 case unit (mặc định đóng, mở/đóng) + 1 case e2e trên UI thật (thu gọn → mở → đóng → bấm chip) + helper `expandSources()` cho 3 e2e cũ. Test: FE **142 → 144**, e2e **17 → 18**. Thêm **KB-9.4** (ngưỡng liên quan, BE+FE) vào backlog — **chờ trả lời Q&A** (score nào, hành vi khi tất cả dưới ngưỡng, có hiện số nguồn bị loại). |
