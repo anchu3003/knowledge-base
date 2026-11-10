@@ -223,7 +223,28 @@ test.describe('Kho tài liệu (Sheet)', () => {
         await page.keyboard.press('Escape');
         await expect(sheet).toBeHidden();
     });
+
+    // TD-23 (KB-5.17): panel hiện **mọi** check của `/ready` + nút kiểm provider thật (`?deep=true`).
+    test('Readiness: liệt kê mọi check, có nút "Kiểm tra provider"', async ({page}) => {
+        await page.goto('/');
+        await page.getByRole('button', {name: 'Kho tài liệu'}).click();
+
+        const checks = page.getByTestId('ready-checks');
+        await expect(checks).toBeVisible();
+        // BE thật luôn trả các check rẻ (provider_config, prompt_file, collection) + startup_sync + rate_limit
+        await expect(page.getByTestId('ready-check-provider_config')).toBeVisible({timeout: 15_000});
+        await expect(page.getByTestId('ready-check-collection')).toBeVisible();
+        expect(await checks.locator('li').count()).toBeGreaterThanOrEqual(3);
+
+        // Bấm "Kiểm tra provider" ⇒ gọi `/ready?deep=true` (tốn 1 request quota) và giữ panel mở
+        const deepRequest = page.waitForRequest((req) => req.url().includes('/ready?deep=true'));
+        await page.getByRole('button', {name: /Kiểm tra provider/i}).click();
+        await deepRequest;
+        await expect(page.getByTestId('ready-check-provider')).toBeVisible({timeout: 20_000});
+        await page.screenshot({path: 'test-results/shot-15-ready-checks.png'});
+    });
 });
+
 
 test.describe('Panel Nguồn', () => {
     test('Nguồn dài (path + snippet) KHÔNG làm tràn ngang', async ({page}) => {

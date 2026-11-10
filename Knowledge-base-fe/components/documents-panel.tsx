@@ -30,7 +30,7 @@ import type {
 } from '@/lib/types';
 import {Button} from '@/components/ui/button';
 import {Sheet, SheetContent, SheetTitle} from '@/components/ui/sheet';
-import {CheckCircle2, Database, RefreshCw, Trash2, X, XCircle} from 'lucide-react';
+import {CheckCircle2, Database, RefreshCw, Stethoscope, Trash2, X, XCircle} from 'lucide-react';
 
 /** Từ khoá phải gõ để xác nhận xoá index (Q&A KB-4.5 Q2). */
 export const CLEAR_CONFIRM_WORD = 'CLEAR';
@@ -121,7 +121,8 @@ export interface DocumentsPanelContentProps {
     /** Lỗi của Đồng bộ/Clear. */
     actionError: ApiErrorView | null;
     /** Hành động đang chạy. */
-    busy: 'sync' | 'clear' | null;
+    busy: 'sync' | 'clear' | 'check' | null;
+
     /** Hành động đang chờ xác nhận (chỉ Clear cần — sync không phá huỷ). */
     pending: 'clear' | null;
     syncResult: DocumentsSyncResult | null;
@@ -130,6 +131,9 @@ export interface DocumentsPanelContentProps {
     onReload: () => void;
     onClose: () => void;
     onSync: () => void;
+    /** TD-23: gọi `/ready?deep=true` — kiểm provider thật (tốn 1 request `max_tokens=1`). */
+    onCheckProvider: () => void;
+
     onAskClear: () => void;
     onCancel: () => void;
     onConfirmClear: () => void;
@@ -177,6 +181,8 @@ export function DocumentsPanelContent({
                                            onReload,
                                            onClose,
                                            onSync,
+                                           onCheckProvider,
+
                                            onAskClear,
                                            onCancel,
                                            onConfirmClear,
@@ -240,28 +246,47 @@ export function DocumentsPanelContent({
 
                     {ready && (
                         <section>
-                            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                Readiness
-                            </h3>
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    Readiness
+                                </h3>
+                                <button type="button" onClick={onCheckProvider}
+                                        disabled={disabled}
+                                        title="Gọi provider 1 request max_tokens=1 để chắc key còn sống (tốn 1 request quota)"
+                                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                                    <Stethoscope
+                                        className={`h-3 w-3 ${busy === 'check' ? 'animate-pulse' : ''}`}/>
+                                    {busy === 'check' ? 'Đang kiểm…' : 'Kiểm tra provider'}
+                                </button>
+                            </div>
                             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${readyToneClasses(tone)}`}>
                                 {tone === 'ok'
                                     ? <CheckCircle2 className="h-3.5 w-3.5"/>
                                     : <XCircle className="h-3.5 w-3.5"/>}
                                 {ready.status} — {readyLabel(tone)}
                             </span>
+                            {/* TD-23: hiện **mọi** check, không chỉ cái fail — nhờ đó thấy được
+                                `startup_sync` (TD-25), `rate_limit` (TD-20) mà trước đây phải curl. */}
+                            <ul className="mt-2 space-y-1" data-testid="ready-checks">
+                                {Object.entries(ready.checks ?? {}).map(([name, check]) => (
+                                    <li key={name}
+                                        data-testid={`ready-check-${name}`}
+                                        className={`rounded-md px-2 py-1 text-xs ${check.ok
+                                            ? 'bg-slate-50 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300'
+                                            : 'bg-rose-50 text-rose-800 dark:bg-rose-900/20 dark:text-rose-200'}`}>
+                                        <span className="font-mono font-semibold">{check.ok ? '✓' : '✗'} {name}</span>
+                                        {check.detail && <span className="opacity-90">: {check.detail}</span>}
+                                    </li>
+                                ))}
+                            </ul>
                             {failures.length > 0 && (
-                                <ul className="mt-2 space-y-1">
-                                    {failures.map((failure) => (
-                                        <li key={failure.name}
-                                            className="rounded-md bg-rose-50 px-2 py-1 text-xs text-rose-800 dark:bg-rose-900/20 dark:text-rose-200">
-                                            <span className="font-mono font-semibold">{failure.name}</span>
-                                            {failure.detail && <span className="opacity-90">: {failure.detail}</span>}
-                                        </li>
-                                    ))}
-                                </ul>
+                                <p className="mt-2 text-[11px] font-medium text-rose-700 dark:text-rose-300">
+                                    {failures.length} check lỗi (đánh dấu ✗ ở trên).
+                                </p>
                             )}
                         </section>
                     )}
+
 
                     {actionError && <ErrorBox view={actionError}/>}
 
@@ -375,7 +400,7 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState<ApiErrorView | null>(null);
     const [actionError, setActionError] = useState<ApiErrorView | null>(null);
-    const [busy, setBusy] = useState<'sync' | 'clear' | null>(null);
+    const [busy, setBusy] = useState<'sync' | 'clear' | 'check' | null>(null);
     const [pending, setPending] = useState<'clear' | null>(null);
     const [syncResult, setSyncResult] = useState<DocumentsSyncResult | null>(null);
     const [cleared, setCleared] = useState(false);
@@ -438,6 +463,19 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
         }
     };
 
+    /** TD-23: `deep=true` ⇒ BE gọi provider 1 request `max_tokens=1` (biết key còn sống hay không). */
+    const handleCheckProvider = async () => {
+        setBusy('check');
+        setActionError(null);
+        try {
+            setReady(await getReady({deep: true}));
+        } catch (error) {
+            setActionError(describeApiError(error));
+        } finally {
+            setBusy(null);
+        }
+    };
+
     const handleConfirmClear = async () => {
         setBusy('clear');
         setActionError(null);
@@ -477,6 +515,7 @@ export function DocumentsPanel({open, onClose}: DocumentsPanelProps) {
                     onReload={() => void load()}
                     onClose={onClose}
                 onSync={() => void handleSync()}
+                onCheckProvider={() => void handleCheckProvider()}
                 onAskClear={() => {
                     setActionError(null);
                     setSyncResult(null);

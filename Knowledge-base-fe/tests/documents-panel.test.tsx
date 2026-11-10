@@ -26,6 +26,7 @@ const baseProps = {
     onReload: vi.fn(),
     onClose: vi.fn(),
     onSync: vi.fn(),
+    onCheckProvider: vi.fn(),
     onAskClear: vi.fn(),
     onCancel: vi.fn(),
     onConfirmClear: vi.fn(),
@@ -43,7 +44,8 @@ describe('DocumentsPanelContent (KB-4.5)', () => {
     });
 
     it('/ready = error ⇒ badge lỗi + tên check fail, chỉ rõ lý do', () => {
-        render(<DocumentsPanelContent {...baseProps} ready={{
+        const onCheckProvider = vi.fn();
+        render(<DocumentsPanelContent {...baseProps} onCheckProvider={onCheckProvider} ready={{
             status: 'error',
             checks: {
                 provider_config: {ok: false, detail: 'missing config: OPENAI_API_KEY'},
@@ -52,10 +54,37 @@ describe('DocumentsPanelContent (KB-4.5)', () => {
         }}/>);
 
         expect(screen.getByText(/Có check lỗi/)).toBeInTheDocument();
-        expect(screen.getByText('provider_config')).toBeInTheDocument();
+        expect(screen.getByTestId('ready-check-provider_config')).toHaveTextContent('✗ provider_config');
         expect(screen.getByText(/: missing config: OPENAI_API_KEY/)).toBeInTheDocument();
-        // check ok không bị liệt kê như lỗi
-        expect(screen.queryByText('collection')).toBeNull();
+        // TD-23: check ok cũng hiện (để thấy startup_sync / rate_limit) nhưng đánh dấu ✓
+        expect(screen.getByTestId('ready-check-collection')).toHaveTextContent('✓ collection');
+    });
+
+    it('TD-23: hiện mọi check gồm startup_sync + rate_limit từ BE', () => {
+        render(<DocumentsPanelContent {...baseProps} ready={{
+            status: 'ok',
+            checks: {
+                provider_config: {ok: true, detail: 'model=gpt-4o-mini'},
+                startup_sync: {ok: true, detail: 'index sync xong trong 1.2s (+0 mới, 601 chunk)'},
+                rate_limit: {ok: true, detail: 'rate limit tắt (RATE_LIMIT_ENABLED=false)'},
+            },
+        }}/>);
+
+        expect(screen.getByTestId('ready-check-startup_sync')).toHaveTextContent('601 chunk');
+        expect(screen.getByTestId('ready-check-rate_limit')).toHaveTextContent('RATE_LIMIT_ENABLED');
+        expect(screen.queryByText(/Có check lỗi/)).toBeNull();
+    });
+
+    it('TD-23: bấm "Kiểm tra provider" gọi handler, đang kiểm thì disable', async () => {
+        const onCheckProvider = vi.fn();
+        const {rerender} = render(<DocumentsPanelContent {...baseProps} onCheckProvider={onCheckProvider}/>);
+
+        await userEvent.click(screen.getByRole('button', {name: /Kiểm tra provider/i}));
+        expect(onCheckProvider).toHaveBeenCalledOnce();
+
+        rerender(<DocumentsPanelContent {...baseProps} busy="check" onCheckProvider={onCheckProvider}/>);
+        const checking = screen.getByRole('button', {name: /Đang kiểm/i});
+        expect(checking).toBeDisabled();
     });
 
     it('lỗi tải dữ liệu ⇒ banner đúng contract KB-4.1 (code + request_id)', () => {
