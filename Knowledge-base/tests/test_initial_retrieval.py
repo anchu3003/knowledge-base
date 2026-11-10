@@ -27,6 +27,10 @@ class RecordingDocumentService:
             raise RuntimeError("retrieval down")
         return self.results.get(query, [hit(f"{query[:6]}", 0.5)])
 
+    def filter_by_relevance(self, docs, threshold=None):
+        """KB-9.4: fake không lọc (test ngưỡng ở tests/test_relevance_filter.py)."""
+        return list(docs), 0
+
 
 def make_service(*, enabled=True, max_parts=3, doc_service=None) -> ChatService:
     service = object.__new__(ChatService)  # bỏ qua __init__ (LLM client thật)

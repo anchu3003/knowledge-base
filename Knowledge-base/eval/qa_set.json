@@ -1,14 +1,14 @@
 {
-  "version": 3,
+  "version": 4,
   "created": "2026-11-07",
-  "updated": "2026-11-09",
-  "notes": "Golden set cho eval retrieval + grounding. v2 (KB-2.4): user dọn corpus Interview/ còn Backend&Devops ⇒ bỏ 5 câu trỏ tài liệu đã xoá, thêm 5 câu từ tài liệu còn lại. v3 (KB-5.4): thêm 5 câu **nhiều ý** (q16–q20), mỗi câu cần thông tin từ **2 tài liệu** ⇒ dùng để đo multi-query (hit@k nhạy với việc phủ đủ ý hơn là 15 câu cũ đã bão hoà 1.0). expected_files tính từ DOCUMENTS_FOLDER (Interview/).",
+  "updated": "2026-11-10",
+  "notes": "v4 (KB-9.5): corpus đã được dọn lại (56 -> 234 file, 601 -> 2.879 chunk) nên 10 expected_files của v3 trỏ path không còn tồn tại (Design patterns & Architecture/, DBMS & SQL/, Messaging/) — đã remap sang path mới. Thêm 8 câu (q21-q28) phủ các khu vực mới: AI (embedding/semantic search, agents, eval), Data Structure, Interview Algorithm, Frontend, Cloud/AWS. Mục tiêu: bộ vàng phản ánh đúng corpus hiện tại, dùng để chốt tham số retrieval + ngưỡng liên quan (KB-9.4).",
   "items": [
     {
       "id": "q01",
       "question": "Saga pattern giải quyết vấn đề gì trong microservices và tại sao không dùng 2PC?",
       "expected_files": [
-        "Backend&Devops/Design patterns & Architecture/Saga Pattern.md"
+        "Backend&Devops/Design Patterns/Saga Pattern.md"
       ],
       "expected_keywords": [
         "saga",
@@ -19,7 +19,7 @@
       "id": "q02",
       "question": "Chuẩn hoá database (normalization) nhằm mục đích gì?",
       "expected_files": [
-        "Backend&Devops/DBMS & SQL/Data Normalization.md"
+        "Backend&Devops/Database/SQL/Data Normalization.md"
       ],
       "expected_keywords": [
         "redundan",
@@ -30,7 +30,7 @@
       "id": "q03",
       "question": "Khi nào nên dùng B-Tree index và khi nào nên dùng Hash index?",
       "expected_files": [
-        "Backend&Devops/DBMS & SQL/Index.md"
+        "Backend&Devops/Database Index.md"
       ],
       "expected_keywords": [
         "range",
@@ -135,7 +135,7 @@
       "id": "q13",
       "question": "Quy trình optimize một câu query SQL chậm gồm những bước nào?",
       "expected_files": [
-        "Backend&Devops/DBMS & SQL/Optimize Query.md"
+        "Backend&Devops/Database/SQL/Optimize Query.md"
       ],
       "expected_keywords": [
         "execution plan"
@@ -156,7 +156,7 @@
       "id": "q15",
       "question": "RabbitMQ là gì và exchange có vai trò gì trong RabbitMQ?",
       "expected_files": [
-        "Backend&Devops/Messaging/Rabitmq.md"
+        "Backend&Devops/Communication/Application Layer/Message Broker/Rabitmq.md"
       ],
       "expected_keywords": [
         "exchange"
@@ -202,9 +202,9 @@
       "id": "q19",
       "question": "Khi optimize một câu query SQL chậm thì nên xem index nào và dùng hint ra sao?",
       "expected_files": [
-        "Backend&Devops/DBMS & SQL/Optimize Query.md",
-        "Backend&Devops/DBMS & SQL/Index.md",
-        "Backend&Devops/DBMS & SQL/Oracle Sql Hints.md"
+        "Backend&Devops/Database/SQL/Optimize Query.md",
+        "Backend&Devops/Database Index.md",
+        "Backend&Devops/Database/SQL/Oracle Sql Hints.md"
       ],
       "expected_keywords": [
         "index",
@@ -215,12 +215,72 @@
       "id": "q20",
       "question": "Saga pattern và RabbitMQ phối hợp thế nào để đảm bảo eventual consistency giữa các service?",
       "expected_files": [
-        "Backend&Devops/Design patterns & Architecture/Saga Pattern.md",
-        "Backend&Devops/Messaging/Rabitmq.md"
+        "Backend&Devops/Design Patterns/Saga Pattern.md",
+        "Backend&Devops/Communication/Application Layer/Message Broker/Rabitmq.md"
       ],
       "expected_keywords": [
         "saga",
         "rabbit"
+      ]
+    },
+    {
+      "id": "q21",
+      "question": "Embedding là gì và semantic search khác keyword search ở điểm nào?",
+      "expected_files": [
+        "AI/Embeddings & Semantic Search.md"
+      ],
+      "notes": "khu vực AI mới thêm (không có trong v3)"
+    },
+    {
+      "id": "q22",
+      "question": "Trong RAG, retrieval và generation tách vai trò thế nào và vì sao cần rerank?",
+      "expected_files": [
+        "AI/Embeddings & Semantic Search.md",
+        "AI/LLM Fundamentals.md"
+      ],
+      "notes": "câu nhiều ý: cần cả 2 file"
+    },
+    {
+      "id": "q23",
+      "question": "Agent dùng tool calling khác gì một chatbot thường?",
+      "expected_files": [
+        "AI/Agents & Tool Calling.md"
+      ]
+    },
+    {
+      "id": "q24",
+      "question": "Đánh giá một hệ LLM nên đo những metric nào?",
+      "expected_files": [
+        "AI/LLM Evaluation.md"
+      ]
+    },
+    {
+      "id": "q25",
+      "question": "Khi nào nên dùng hash table thay vì array để tra cứu?",
+      "expected_files": [
+        "Data Structure/Hash Tables.md"
+      ]
+    },
+    {
+      "id": "q26",
+      "question": "Quy hoạch động (dynamic programming) giải bài toán theo nguyên tắc nào?",
+      "expected_files": [
+        "Interview Algorithm/Dynamic Programming.md"
+      ]
+    },
+    {
+      "id": "q27",
+      "question": "JavaScript xử lý bất đồng bộ bằng event loop như thế nào?",
+      "expected_files": [
+        "Frontend/JavaScript.md"
+      ]
+    },
+    {
+      "id": "q28",
+      "question": "AWS Well-Architected có những trụ cột (pillar) nào?",
+      "expected_files": [
+        "Cloud/AWS/AWS Index.md",
+        "Cloud/AWS/Best practices.md"
       ]
     }
   ]

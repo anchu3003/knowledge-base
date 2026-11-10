@@ -87,6 +87,10 @@ class FakeDocumentService:
     async def search_similar_documents(self, query, k=3):
         return []
 
+    def filter_by_relevance(self, docs, threshold=None):
+        """KB-9.4: fake không lọc (test ngưỡng ở tests/test_relevance_filter.py)."""
+        return list(docs), 0
+
 
 class FailingLLM:
     """Fake LLM client: `agenerate`/`astream` đều raise lỗi provider."""
