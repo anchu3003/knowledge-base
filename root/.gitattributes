@@ -1,0 +1,9 @@
+# Chuẩn hoá EOL: mọi file text = LF (tránh churn CRLF khi file đi qua Windows).
+# Giống 2 repo con (KB-7.1).
+* text=auto eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
