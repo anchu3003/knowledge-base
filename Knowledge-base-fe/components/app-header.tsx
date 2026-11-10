@@ -2,9 +2,10 @@
 
 import {useState} from 'react';
 import Link from 'next/link';
-import {Database, Menu} from 'lucide-react';
+import {Database, History} from 'lucide-react';
 
 import {ThemeToggle} from '@/components/theme-toggle';
+import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Sheet, SheetContent, SheetTitle, SheetTrigger} from '@/components/ui/sheet';
 import {Tooltip, TooltipContent, TooltipTrigger} from '@/components/ui/tooltip';
@@ -13,32 +14,43 @@ interface AppHeaderProps {
     /** Mở drawer "Kho tài liệu" (KB-4.5) */
     onOpenDocuments: () => void;
     /**
-     * Nội dung sidebar cho drawer mobile — render-prop để header tự đóng drawer sau khi chọn
+     * Nội dung ngăn kéo lịch sử — render-prop để header tự đóng drawer sau khi chọn
      * (`close()`), còn state chat vẫn nằm ở `app/page.tsx`.
+     *
+     * KB-5.11: trước đây prop này chỉ dùng cho mobile (`md:hidden` hamburger); nay danh sách hội thoại
+     * **chỉ** sống trong ngăn kéo nên nút hiện ở mọi kích thước.
      */
-    renderMobileSidebar?: (close: () => void) => React.ReactNode;
+    renderSidebar?: (close: () => void) => React.ReactNode;
+    /** Số cuộc trò chuyện — hiện trong `Badge` cạnh nút Lịch sử */
+    sessionCount?: number;
 }
 
 /**
  * Header (KB-4.8) — bỏ các control giả của bản onboarding: user "An Chu", badge role, nút **Logout**
- * (BE không có auth) và nút gradient tự phát. Chỉ còn: brand, drawer mobile, Kho tài liệu, theme toggle.
+ * (BE không có auth) và nút gradient tự phát.
+ *
+ * KB-5.11: **bỏ `border-b`** (đường kẻ mờ dưới header) và đổi hamburger mobile thành nút **Lịch sử** có badge
+ * số phiên — vì danh sách hội thoại không còn là cột cố định.
  */
-export function AppHeader({onOpenDocuments, renderMobileSidebar}: AppHeaderProps) {
+export function AppHeader({onOpenDocuments, renderSidebar, sessionCount}: AppHeaderProps) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     return (
-        <header
-            className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur">
-            {renderMobileSidebar && (
+        <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 bg-background/85 px-3 backdrop-blur">
+            {renderSidebar && (
                 <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
                     <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Mở menu">
-                            <Menu className="size-4"/>
+                        <Button variant="ghost" size="sm" className="gap-2" aria-label="Mở lịch sử trò chuyện">
+                            <History className="size-4"/>
+                            <span className="hidden sm:inline">Lịch sử</span>
+                            {typeof sessionCount === 'number' && sessionCount > 0 && (
+                                <Badge variant="muted" className="ml-0.5">{sessionCount}</Badge>
+                            )}
                         </Button>
                     </SheetTrigger>
                     <SheetContent side="left" className="w-72 p-0">
                         <SheetTitle className="sr-only">Danh sách cuộc trò chuyện</SheetTitle>
-                        {renderMobileSidebar(() => setSidebarOpen(false))}
+                        {renderSidebar(() => setSidebarOpen(false))}
                     </SheetContent>
                 </Sheet>
             )}
@@ -67,3 +79,4 @@ export function AppHeader({onOpenDocuments, renderMobileSidebar}: AppHeaderProps
         </header>
     );
 }
+

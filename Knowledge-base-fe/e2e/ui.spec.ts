@@ -114,11 +114,12 @@ test.describe('Shell & layout', () => {
         await page.screenshot({path: 'test-results/shot-01-home.png'});
     });
 
-    test('720px: sidebar ẩn, hamburger hiện, không tràn ngang', async ({page}) => {
+    test('720px: không cột sidebar, ngăn kéo Lịch sử mở được, không tràn ngang', async ({page}) => {
         await page.setViewportSize({width: 720, height: 900});
         await page.goto('/');
-        await expect(page.locator('aside')).toBeHidden();
-        await expect(page.getByRole('button', {name: 'Mở menu'})).toBeVisible();
+        // KB-5.11: bỏ hẳn cột `aside` — hội thoại nằm trong ngăn kéo
+        await expect(page.locator('aside')).toHaveCount(0);
+        await expect(page.getByRole('button', {name: 'Mở lịch sử trò chuyện'})).toBeVisible();
 
         const report = await overflowReport(page);
         expect(report.overflow, JSON.stringify(report, null, 2)).toBeLessThanOrEqual(0);
@@ -150,8 +151,18 @@ test.describe('Lịch sử hội thoại (KB-4.9)', () => {
         await page.goto('/');
 
         await expect(page.getByText('Câu hỏi kiểm tra F5')).toBeVisible();
-        // `getByText` với string là case-insensitive + substring ⇒ phải `exact` + scope, nếu không khớp cả câu hỏi trong khung chat (strict mode)
-        await expect(page.locator('aside').getByText('Kiểm tra F5', {exact: true})).toBeVisible();
+        // KB-5.11: danh sách hội thoại nằm trong ngăn kéo ⇒ mở rồi mới thấy tiêu đề
+        await page.getByRole('button', {name: 'Mở lịch sử trò chuyện'}).click();
+        const drawer = page.getByRole('dialog');
+        await expect(drawer.getByText('Kiểm tra F5', {exact: true})).toBeVisible();
+        // KB-5.11: nút xoá phải **nằm trong** ngăn kéo. Bug thật đã gặp: Radix `ScrollArea` bọc nội dung trong
+        // `display: table` ⇒ tiêu đề dài làm dòng rộng quá drawer và đẩy nút xoá ra ngoài (x=363 > 288).
+        // `toBeVisible()` không bắt được lỗi này vì phần tử vẫn "visible" dù ở ngoài khung nhìn.
+        const deleteButton = drawer.getByRole('button', {name: /Xoá cuộc trò chuyện/}).first();
+        await expect(deleteButton).toBeVisible();
+        const [drawerBox, deleteBox] = await Promise.all([drawer.boundingBox(), deleteButton.boundingBox()]);
+        expect(deleteBox!.x + deleteBox!.width).toBeLessThanOrEqual(drawerBox!.x + drawerBox!.width + 0.5);
+        await page.keyboard.press('Escape');
         await expect(page.locator('.md-body strong')).toHaveText('giữ sau reload'); // markdown render thật
     });
 });
@@ -359,8 +370,10 @@ test.describe('Stream: plain text khi đang viết, markdown khi xong (KB-5.6)',
     test('chip [S1] chỉ xuất hiện sau `end` (không parse markdown mỗi token)', async ({page}) => {
         const sse = await startSseServer([
             {delayMs: 0, payload: {type: 'start', conversation_id: 'conv-kb56', metadata: {model: 'openai/gpt-oss-120b'}}},
-            {delayMs: 300, payload: {type: 'token', token: '**Đậm** và '}},
-            {delayMs: 1200, payload: {type: 'token', token: 'nguồn [S1]'}},
+            // KB-5.11: nới khoảng cách token — bản production build nhanh nên cửa sổ "đang stream" quá ngắn,
+            // test từng flaky (assert `chip chưa có` chạy sau khi `end` đã tới).
+            {delayMs: 800, payload: {type: 'token', token: '**Đậm** và '}},
+            {delayMs: 2500, payload: {type: 'token', token: 'nguồn [S1]'}},
             {
                 delayMs: 300,
                 payload: {
@@ -381,6 +394,12 @@ test.describe('Stream: plain text khi đang viết, markdown khi xong (KB-5.6)',
         ]);
 
         try {
+            // KB-5.11: BE thật có thể đã lưu nhiều hội thoại (KB-5.2) ⇒ app nạp lại và **đã có sẵn** chip [S1],
+            // làm assert `chip chưa xuất hiện` sai. Cô lập test: server trả danh sách rỗng.
+            await page.route('**/conversations', (route) =>
+                route.fulfill({status: 200, contentType: 'application/json',
+                    body: JSON.stringify({conversations: [], total: 0})}),
+            );
             await page.route('**/chat/stream', (route) =>
                 route.continue({url: sse.url, headers: {...route.request().headers()}}),
             );
@@ -606,8 +625,11 @@ test.describe('Lịch sử hội thoại bền (KB-5.2)', () => {
 
         await page.goto('/');
 
-        await expect(page.getByText('Hội thoại offline')).toBeVisible();
+        // messages của session đang mở vẫn hiện (không cần mở ngăn kéo)
         await expect(page.getByText('Câu trả lời cũ')).toBeVisible();
-        await expect(page.getByText('Kho tài liệu')).toBeVisible(); // app vẫn render bình thường
+        await expect(page.getByRole('button', {name: 'Kho tài liệu'})).toBeVisible(); // app vẫn render
+        // tiêu đề session nằm trong ngăn kéo
+        await page.getByRole('button', {name: 'Mở lịch sử trò chuyện'}).click();
+        await expect(page.getByRole('dialog').getByText('Hội thoại offline')).toBeVisible();
     });
 });

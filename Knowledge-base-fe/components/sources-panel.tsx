@@ -159,10 +159,10 @@ function SourceCard({source, index, expanded, highlighted, onToggle, registerRef
             ref={registerRef}
             data-testid={`source-card-${label}`}
             data-citation-id={label}
-            className={`w-full min-w-0 overflow-hidden rounded-xl border p-3 shadow-sm transition-all ${
+            className={`w-full min-w-0 overflow-hidden rounded-xl p-3 shadow-sm transition-all ${
                 highlighted
-                    ? 'border-violet-400 bg-violet-50 ring-2 ring-violet-300 dark:border-violet-500 dark:bg-violet-900/30 dark:ring-violet-700'
-                    : 'border-slate-200 bg-white hover:shadow-md dark:border-slate-700 dark:bg-slate-800'
+                    ? 'bg-violet-50 ring-2 ring-violet-300 dark:bg-violet-900/30 dark:ring-violet-700'
+                    : 'bg-muted/40 hover:bg-muted/60 dark:bg-slate-800'
             }`}
         >
             <div className="flex items-start gap-3">

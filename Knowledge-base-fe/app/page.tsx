@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useRef, useState, useSyncExternalStore} from 'react';
 
 import {AppHeader} from '@/components/app-header';
-import {AppSidebar, SidebarContent, type ChatSession} from '@/components/app-sidebar';
+import {SidebarContent, type ChatSession} from '@/components/app-sidebar';
 import {ChatComposer} from '@/components/chat-composer';
 import {ChatMessages, type CitationFocus} from '@/components/chat-messages';
 import {DocumentsPanel} from '@/components/documents-panel';
@@ -498,13 +498,13 @@ export default function ChatPage() {
         <div className="flex h-svh flex-col overflow-hidden bg-background">
             <AppHeader
                 onOpenDocuments={() => setShowDocumentsPanel(true)}
-                renderMobileSidebar={(close) => <SidebarContent {...sidebarProps} onAfterAction={close}/>}
+                renderSidebar={(close) => <SidebarContent {...sidebarProps} onAfterAction={close}/>}
+                sessionCount={store.sessions.length}
             />
             <DocumentsPanel open={showDocumentsPanel} onClose={() => setShowDocumentsPanel(false)}/>
 
             <div className="flex min-h-0 flex-1">
-                <AppSidebar {...sidebarProps}/>
-
+                {/* KB-5.11: bỏ cột sidebar cố định — danh sách hội thoại nằm trong ngăn kéo (header). */}
                 <main className="flex min-h-0 min-w-0 flex-1 flex-col">
                     {apiError && (
                         <ErrorBanner
