@@ -6,7 +6,7 @@
 > ⚠️ **Khôi phục 2026-11-08**: file này bị truncate khi ghi script; dựng lại từ VS Code local history + `docs/phases/*`.
 > Ticket Phase 0/1/2/6/7 giữ nguyên văn; **Phase 2–4 viết lại dạng rút gọn** (chi tiết ở `docs/phases/phase-N.md`); **TD-20** mất mô tả gốc.
 
-**Ticket đang làm:** _(trống — **Phase 8 hoàn tất** (tài liệu & học tập), KB-8.1→8.8 vừa xong)_
+**Ticket đang làm:** _(trống — Phase 9 xong 2/2; chất lượng câu trả lời đã cải thiện, còn 2 việc đề xuất trong §4c)_
 **Ticket tiếp theo:** **KB-8.1** (ADR backfill #1 — bản học tập sâu) — Q&A đã chốt (Q1=B sâu · Q2=A đủ 16 · Q3=B ôn tập ở README · Q4=không bản EN) ⇒ **chạy được ngay**; nợ mở đáng làm: **TD-29** (top-N=4: MRR 1,0 + 2,0 s), **TD-9** (image 16,5 GB), **TD-18/19/27** (S)
 
 ---
@@ -65,6 +65,7 @@ RAG + UI.
 | 7 | Dev env: migrate sang WSL (Windows sạch) | 1 / 1 | ✅ Done |
 | 5b | **Trả nợ kỹ thuật (TD sweep)** — embedding fp32 · rate limit · startup sync nền · UI check provider | **4 / 4** | ✅ **Done** — KB-5.14→5.17; 4 TD trả, 4 TD **Skip** có điều kiện |
 | 8 | Tài liệu & học tập (17 ADR + index học + 3 README) | **8 / 8** | ✅ **Done** — 8.1→8.8 (17 ADR, 28 câu ôn tập, README root/BE/FE) |
+| 9 | **Chất lượng câu trả lời** (chẩn đoán model-vs-RAG · config tham số · UI control) | **2 / 2** | ✅ **Done** — 9.1 (BE) + 9.2 (FE); còn 2 việc đề xuất: hub-file, làm mới bộ eval |
 
 ---
 
@@ -2801,7 +2802,65 @@ FE [!28](https://gitlab.com/anchu3003/knowlege-base-fe/-/merge_requests/28) (KB-
 ---
 
 
-## 5. Ticket tiếp theo (gợi ý thứ tự)
+## 4c. Phase 9 — Chất lượng câu trả lời (chẩn đoán + sửa)
+
+> Xuất phát từ câu hỏi: *"chất lượng câu trả lời hơi tệ, do model kém hay RAG chưa tốt?"*. Trả lời bằng đo
+> trên 1 câu thật (8 fact bắt buộc rút từ tài liệu), 4 điều kiện:
+
+| Điều kiện | Fact | Kết luận |
+|---|---|---|
+| Pipeline thật (k=3, temp .7, max 1000) | 6/8 | baseline |
+| **Gold context** (toàn bộ file nguồn), config cũ | 8/8 **nhưng cắt giữa câu** (1.491 chars) | RAG chọn context sai **và** `max_tokens` cắt câu |
+| Gold context, temp 0.1 / max 2000 | 8/8, đủ câu | config là biến số lớn |
+| Không context (model thuần) | 7/8 | **model không kém** |
+
+⇒ Model ổn; thủ phạm là **(1) config chết** (`ChatRequest` hard-code đè env) và **(2) retrieval quá nông**
+(corpus 601 → 2.879 chunk nhưng `RETRIEVAL_K=3`; file nguồn đúng rơi **hạng 7**).
+
+### KB-9.1 — Env có tác dụng + tham số hợp lý (BE) — Done
+
+| Trường | Giá trị |
+|---|---|
+| Repo | BE · Ước lượng S · Phụ thuộc — |
+
+**Bug**: `ChatRequest.max_tokens/temperature` default 1000/0.7 **trong schema** ⇒ Pydantic luôn điền ⇒
+service bỏ qua `DEFAULT_*` (2 env chết). Thêm: `temperature or default` biến `0.0` thành 0.7.
+
+**Sửa**: default `None` (+ validate 64–8000 / 0–2); service dùng `x if x is not None else settings.default_*`;
+env mới `DEFAULT_MAX_TOKENS=2500`, `DEFAULT_TEMPERATURE=0.2`, `RETRIEVAL_K=6`.
+
+**Kết quả verify** (cùng câu hỏi): fact **6/8 → 7/8** · `Saga Pattern.md` từ **không có → S1** · không còn cắt
+giữa câu (1.451 chars) · latency warm 5,0–5,2 s (trước 3,4–5,6 s; đổi lấy context rộng hơn) · `pytest -q`
+**329 passed**.
+
+**MR**: BE [!31](https://gitlab.com/anchu3003/knowledge-base-be/-/merge_requests/31)
+
+### KB-9.2 — Control tham số trên UI: mặc định "theo server" + có lưu (FE) — Done
+
+| Trường | Giá trị |
+|---|---|
+| Repo | FE · Ước lượng S |
+
+Composer đã có 2 control nhưng hard-code 1000/0.7, **không lưu** (F5 mất), cap 2000 ⇒ mỗi phiên âm thầm ghi
+đè default tốt hơn của server. Sửa: `lib/answer-settings.ts` (store ngoài React như ADR-0015), `null` =
+"theo server" ⇒ **không gửi field**; badge + nút **Dùng theo server**; cap 200–4000.
+
+**Kết quả verify**: `npm run test` **142 passed** (trước 132) · e2e **17 passed** (thêm 1 case kiểm **body
+request thật**: chỉ gửi field đã đổi, lưu qua reload, reset về null) · lint 0 · build ✓.
+
+**MR**: FE [!30](https://gitlab.com/anchu3003/knowlege-base-fe/-/merge_requests/30)
+
+### Còn mở (đề xuất ticket kế)
+
+- **Hub-file pollution**: top-k bị các file Q&A/index lớn (`Microservices Q&A.md`, `Junior/Middle Java
+  Interview.md`) chiếm chỗ; cần luật xếp hạng/loại trừ file hub.
+- **Bộ eval lỗi thời**: `qa_set.json` trỏ path cũ (sau khi dọn `Interview/`) ⇒ phải re-point + chạy lại
+  trước/sau khi chỉnh tham số, thay vì tin `hit@k 1.0` cũ.
+- **DB không bị ảnh hưởng**: `chroma_db` có 4 segment cũ (dọn bằng clear + sync nếu muốn gọn).
+
+---
+
+
 
 **Q&A Phase 8 đã chốt** (2026-11-09): Q1 = **B** (ADR bản học tập sâu: số đo + code + anti-pattern + "nếu làm lại") · Q2 = **A** (làm đủ **16** quyết định) · Q3 = **B** (câu hỏi ôn tập gom ở `docs/adr/README.md`) · Q4 = **không** cần bản EN. ⇒ **không chờ gì nữa**, chạy KB-8.1 được ngay.
 
