@@ -65,7 +65,7 @@ RAG + UI.
 | 7 | Dev env: migrate sang WSL (Windows sạch) | 1 / 1 | ✅ Done |
 | 5b | **Trả nợ kỹ thuật (TD sweep)** — embedding fp32 · rate limit · startup sync nền · UI check provider | **4 / 4** | ✅ **Done** — KB-5.14→5.17; 4 TD trả, 4 TD **Skip** có điều kiện |
 | 8 | Tài liệu & học tập (17 ADR + index học + 3 README) | **8 / 8** | ✅ **Done** — 8.1→8.8 (17 ADR, 28 câu ôn tập, README root/BE/FE) |
-| 9 | **Chất lượng câu trả lời** (chẩn đoán model-vs-RAG · config · UI control · nguồn thu gọn · ngưỡng liên quan · bộ vàng v4 · cấu hình runtime) | **5 / 5** | ✅ **Done** — 9.1 → 9.5 (BE + FE đều merged) |
+| 9 | **Chất lượng câu trả lời** (chẩn đoán · config · UI · nguồn thu gọn · ngưỡng liên quan · bộ vàng v4 · cấu hình runtime · gộp cấu hình vào Tuỳ chọn · hub-file) | **6 / 7** | ✅ 9.1–9.6 · ⏭️ **9.7 Skip** (đo: hạ điểm hub làm `hit@k` 0,964 → 0,75–0,82) |
 
 ---
 
@@ -2993,6 +2993,49 @@ re-index toàn bộ), TD-23 (sync hiện 1,2 s/file nên chưa cần thanh tiế
 
 **MR**: BE [!32](https://gitlab.com/anchu3003/knowledge-base-be/-/merge_requests/32) ·
 FE [!32](https://gitlab.com/anchu3003/knowlege-base-fe/-/merge_requests/32) — squash-merged.
+
+## KB-9.7 — Hub-file pollution: **đo xong, Skip** (hạ điểm là sai hướng)
+
+### Giả thuyết
+File dạng mục lục / Q&A lớn (`*Index*.md`, `Microservices Q&A.md`, `Exam guide.md`…) chứa nhiều từ khoá nên
+chiếm slot top-k, đẩy file nội dung thật ra ngoài ⇒ `precision@k` thấp (0,333). Cách sửa dự kiến: **hạ điểm**
+(hệ số `HUB_FILE_PENALTY`) các chunk thuộc file hub ngay sau rerank.
+
+### Đo (bộ vàng v4 — 28 câu, k=6, rerank top-6, cache tắt)
+| Cấu hình | `hit@k` | `MRR` | `precision@k` |
+|---|---|---|---|
+| **Baseline (không hạ điểm)** | **0,964** | 0,833 | **0,333** |
+| Hạ điểm vô điều kiện 0,5 | 0,821 | 0,851 | 0,208 |
+| Hạ điểm vô điều kiện 0,3 | (tương tự, kém hơn) | — | — |
+| Hạ điểm **có điều kiện** 0,5 (chỉ hạ khi có non-hub ≥ 0,5× điểm hub) | 0,750 | 0,889 | 0,179 |
+| Hạ điểm có điều kiện 0,3 | 0,750 | 0,890 | 0,179 |
+
+### Kết luận: **Skip penalty** — không merge thay đổi hành vi
+- **Vì sao thất bại**: nhiều câu trong bộ vàng có **đáp án chính là file index** (`Database Index.md`,
+  `AWS Index.md` + `Best practices.md`) ⇒ hạ điểm file đó là **mất nguồn đúng**; `precision` còn giảm vì phần
+  nhiễu còn lại (file nội dung nhưng không liên quan) không bị hạ.
+- **Giữ lại**: `app/services/hub_files.py` (nhận diện theo tên + độ dày link/bullet, **16 test**) làm **công cụ
+  chẩn đoán** — dùng để đếm tỉ lệ chunk hub trong top-k khi phân tích retrieval, không tham gia xếp hạng.
+  **Không** đánh dấu hub các file Q&A tự luận (`Junior Java Interview.md`, `Questions for interviewers.md`) —
+  đo cho thấy chúng là nội dung thật, đánh dấu chỉ làm rơi `hit@k`.
+- **Hướng khác cho lần sau** (ghi ở TD-31): tách "mục lục" khỏi index khi ingest (hoặc index riêng loại
+  `outline`), thay vì phạt điểm sau rerank.
+
+**Kết quả verify**
+```
+$ pytest -q                     → 355 passed (16 test mới cho hub_files)
+$ eval 3 cấu hình (xem bảng)    → penalty làm hit@k 0,964 → 0,821 / 0,750
+$ eval sau khi bỏ code penalty  → hit@k 0,964 · MRR 0,833 · precision@k 0,333 (không đổi baseline)
+```
+Snapshot: `eval/runs/2026-11-10T15*-kb97-*.json`.
+
+**Learning note** — "File mục lục chiếm top-k" nghe rất hợp lý nhưng **đo ra là sai**: chính chúng thường là
+nguồn đúng, nên phạt điểm vừa mất `hit@k` vừa không tăng `precision`. Bài học: **giả thuyết về retrieval phải
+đo trên bộ vàng trước khi merge** (ADR-0010) — nếu chỉ "cảm thấy hợp lý" thì đã ship một thay đổi làm hệ thống
+tệ hơn 15% `hit@k`. Cũng học được: heuristic theo **tên file** dễ bắt oan (`interview`/`questions` là nội dung
+thật) ⇒ thu hẹp pattern và test cả chiều "không được bắt oan".
+
+---
 
 ## 6. Learning log
 
