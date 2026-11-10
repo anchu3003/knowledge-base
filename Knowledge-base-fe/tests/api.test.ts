@@ -11,6 +11,7 @@ import {
     getHealth,
     getReady,
     listConversations,
+    saveApiToken,
     postChat,
     syncDocuments,
     streamChat,
@@ -148,6 +149,36 @@ describe('documents & health (KB-4.5)', () => {
             code: 'document_store_error',
             requestId: 'req-5',
         });
+    });
+});
+
+describe('auth token (KB-5.5)', () => {
+    it('không có token ⇒ KHÔNG gửi header X-API-Key', async () => {
+        const mock = stubFetch(async () => makeResponse(200, {collection_name: 'kb', document_count: 1}));
+
+        await getDocumentsStatus();
+
+        const headers = (mock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+        expect(headers['X-API-Key']).toBeUndefined();
+    });
+
+    it('có token trong localStorage ⇒ gửi header X-API-Key', async () => {
+        saveApiToken('token-abc');
+        const mock = stubFetch(async () => makeResponse(200, {collection_name: 'kb', document_count: 1}));
+
+        await getDocumentsStatus();
+
+        const headers = (mock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+        expect(headers['X-API-Key']).toBe('token-abc');
+        saveApiToken('');
+    });
+
+    it('401 unauthorized ⇒ ApiError code unauthorized (không bị coi là lỗi mạng)', async () => {
+        stubFetch(async () => makeResponse(401, {
+            error: {code: 'unauthorized', message: 'Missing or invalid API key.', request_id: 'req-1'},
+        }));
+
+        await expect(getDocumentsStatus()).rejects.toMatchObject({code: 'unauthorized', status: 401});
     });
 });
 

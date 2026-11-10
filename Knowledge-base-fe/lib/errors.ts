@@ -58,6 +58,11 @@ const CODE_VIEWS: Record<string, CodeView> = {
         hint: 'Kiểm tra OPENAI_API_KEY / OPENAI_BASE_URL trong .env của backend.',
         retryable: false,
     },
+    unauthorized: {
+        message: 'Cần API token để truy cập kho tài liệu này.',
+        hint: 'Nhập token trong ô phía trên (lấy từ `API_TOKEN` của backend).',
+        retryable: false,
+    },
     service_unavailable: {
         message: 'Backend chưa sẵn sàng (service chưa khởi tạo xong).',
         hint: 'Chờ vài giây rồi thử lại.',

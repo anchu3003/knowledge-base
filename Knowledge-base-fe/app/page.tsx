@@ -8,6 +8,7 @@ import {ChatComposer} from '@/components/chat-composer';
 import {ChatMessages, type CitationFocus} from '@/components/chat-messages';
 import {DocumentsPanel} from '@/components/documents-panel';
 import {ErrorBanner} from '@/components/error-banner';
+import {TokenGate} from '@/components/token-gate';
 import {ScrollArea} from '@/components/ui/scroll-area';
 import {
     MAX_SESSIONS,
@@ -79,7 +80,7 @@ function buildSession(): ChatSessionRecord {
  * (in-memory + `localStorage`) và đọc bằng `useSyncExternalStore` ⇒ F5 không mất hội thoại, và
  * `getServerSnapshot` rỗng nên SSR không lệch hydration.
  */
-export default function ChatPage() {
+function ChatPageInner() {
     const store = useSyncExternalStore(subscribeChatStore, getChatStoreSnapshot, getChatStoreServerSnapshot);
 
     const activeSession = store.sessions.find((session) => session.id === store.currentSessionId) ?? null;
@@ -546,5 +547,17 @@ export default function ChatPage() {
                 </main>
             </div>
         </div>
+    );
+}
+
+/**
+ * KB-5.5: bọc màn hình nhập token khi `NEXT_PUBLIC_AUTH_ENABLED=true`.
+ * Cờ **tắt** (mặc định) ⇒ `TokenGate` trả children nguyên vẹn, hành vi không đổi.
+ */
+export default function ChatPage() {
+    return (
+        <TokenGate>
+            <ChatPageInner/>
+        </TokenGate>
     );
 }
