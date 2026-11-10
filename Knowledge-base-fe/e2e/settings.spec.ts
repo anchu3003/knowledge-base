@@ -2,7 +2,7 @@ import {expect, test} from '@playwright/test';
 
 /**
  * KB-9.4 + KB-9.6: cấu hình runtime nằm **trong panel "Tuỳ chọn"** của composer (một chỗ duy nhất),
- * đọc từ `GET /settings` của BE thật.
+ * cùng khuôn với 2 control per-request; 2 tham số trùng default bị ẩn.
  */
 async function openSettings(page: import('@playwright/test').Page) {
     await page.goto('/');
@@ -13,24 +13,34 @@ async function openSettings(page: import('@playwright/test').Page) {
 }
 
 test.describe('KB-9.4/9.6 — cấu hình runtime trong Tuỳ chọn', () => {
-    test('12 tham số server hiện trong panel Tuỳ chọn, đúng giá trị BE', async ({page}) => {
+    test('panel cấu hình cùng khuôn, không trùng field, đúng giá trị BE', async ({page}) => {
         const panel = await openSettings(page);
 
+        // Giá trị lấy từ BE
         await expect(page.getByLabel(/Ngưỡng liên quan/)).toHaveValue('0.02');
         await expect(page.getByLabel(/Số chunk đưa vào prompt/)).toHaveValue('6');
         await expect(page.getByLabel(/Số ứng viên rerank/)).toHaveValue('6');
-        await expect(page.getByLabel(/Bật rerank/)).toBeChecked();
-        // 12 tunable: đếm control sinh ra từ `tunables`
-        const rows = panel.locator('div.flex.min-w-0.items-center.justify-between');
-        expect(await rows.count()).toBe(12);
-        await expect(page.getByTestId('settings-state')).toContainText('mặc định');
 
-        // Layout: input phải NẰM TRONG khung panel (đã từng bị label dài đẩy ra ngoài)
+        // KHÔNG còn field trùng với 2 control phía trên (default_temperature / default_max_tokens)
+        await expect(panel.getByText('Temperature mặc định')).toHaveCount(0);
+        await expect(panel.getByText('max_tokens mặc định')).toHaveCount(0);
+
+        // 12 tunable − 2 field trùng = 10 control (7 số + 3 checkbox)
+        expect(await panel.locator('input[type="number"]').count()).toBe(7);
+        expect(await panel.locator('input[type="checkbox"]').count()).toBe(3);
+
+        // Label của 2 control per-request hiện default server thay vì field trùng
+        await expect(page.getByText(/auto \(server: 0\.2\)/)).toBeVisible();
+        await expect(page.getByPlaceholder(/auto \(2500\)/)).toBeVisible();
+
+        // Layout: mọi input nằm trong khung panel
         const panelBox = await panel.boundingBox();
-        const inputBox = await page.getByLabel(/Ngưỡng liên quan/).boundingBox();
-        expect(panelBox && inputBox).toBeTruthy();
-        expect(inputBox!.x).toBeGreaterThanOrEqual(panelBox!.x - 1);
-        expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 1);
+        for (const label of [/Ngưỡng liên quan/, /Số chunk đưa vào prompt/]) {
+            const box = await page.getByLabel(label).boundingBox();
+            expect(box && panelBox).toBeTruthy();
+            expect(box!.x).toBeGreaterThanOrEqual(panelBox!.x - 1);
+            expect(box!.x + box!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width + 1);
+        }
 
         await panel.screenshot({path: 'test-results/shot-18-settings-panel.png'});
     });
@@ -57,4 +67,5 @@ test.describe('KB-9.4/9.6 — cấu hình runtime trong Tuỳ chọn', () => {
         await expect(input).toHaveValue('0.02');
     });
 });
+
 

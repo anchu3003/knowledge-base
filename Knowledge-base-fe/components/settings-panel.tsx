@@ -21,6 +21,10 @@ import {Label} from '@/components/ui/label';
 interface SettingsPanelProps {
     /** Lỗi khi lưu — báo qua banner của panel cha (1 chỗ hiện lỗi). */
     onError?: (view: ApiErrorView | null) => void;
+    /** Nhúng trong panel "Tuỳ chọn" ⇒ ẩn 2 tham số trùng với control per-request ở trên. */
+    inline?: boolean;
+    /** Trả default của server lên cho cha (hiện trong label Temperature / Max tokens). */
+    onLoaded?: (defaults: {temperature: number; maxTokens: number}) => void;
 }
 
 /** Nhãn ngắn tiếng Việt; `description` của BE làm tooltip. */
@@ -39,7 +43,7 @@ const LABELS: Record<string, string> = {
     default_max_tokens: 'max_tokens mặc định',
 };
 
-export function SettingsPanel({onError}: SettingsPanelProps) {
+export function SettingsPanel({onError, inline = false, onLoaded}: SettingsPanelProps) {
     const [data, setData] = useState<SettingsResponse | null>(null);
     const [draft, setDraft] = useState<Record<string, number | boolean>>({});
     const [busy, setBusy] = useState(false);
@@ -53,6 +57,10 @@ export function SettingsPanel({onError}: SettingsPanelProps) {
                 if (cancelled) return;
                 setData(response);
                 setDraft(response.values);
+                onLoaded?.({
+                    temperature: Number(response.defaults.default_temperature ?? 0.2),
+                    maxTokens: Number(response.defaults.default_max_tokens ?? 2500),
+                });
             } catch (error) {
                 if (!cancelled) onError?.(describeApiError(error));
             }
@@ -60,7 +68,7 @@ export function SettingsPanel({onError}: SettingsPanelProps) {
         return () => {
             cancelled = true;
         };
-    }, [onError]);
+    }, [onError, onLoaded]);
 
     if (!data) return null;
 
@@ -100,24 +108,35 @@ export function SettingsPanel({onError}: SettingsPanelProps) {
         }
     };
 
+    /** Khi nhúng vào panel "Tuỳ chọn": ẩn 2 tham số trùng với control per-request ở trên. */
+    const HIDDEN_INLINE = ['default_temperature', 'default_max_tokens'];
+    const visible = inline
+        ? data.tunables.filter((tunable) => !HIDDEN_INLINE.includes(tunable.key))
+        : data.tunables;
+
     const renderControl = (tunable: RuntimeSetting) => {
         const value = draft[tunable.key];
+        // Cùng khuôn với khối Max tokens / Temperature ở trên: control chiếm hết bề ngang ô.
         if (tunable.kind === 'bool') {
             return (
-                <input
-                    type="checkbox"
-                    id={`setting-${tunable.key}`}
-                    className="h-4 w-4"
-                    checked={Boolean(value)}
-                    onChange={(event) => setDraft({...draft, [tunable.key]: event.target.checked})}
-                />
+                <Label htmlFor={`setting-${tunable.key}`}
+                       className="flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border px-2 text-xs font-normal">
+                    <input
+                        type="checkbox"
+                        id={`setting-${tunable.key}`}
+                        className="h-3.5 w-3.5 accent-primary"
+                        checked={Boolean(value)}
+                        onChange={(event) => setDraft({...draft, [tunable.key]: event.target.checked})}
+                    />
+                    {Boolean(value) ? 'Bật' : 'Tắt'}
+                </Label>
             );
         }
         return (
             <Input
                 id={`setting-${tunable.key}`}
                 type="number"
-                className="h-8 w-20 shrink-0 text-right"
+                className="h-8"
                 min={tunable.min ?? undefined}
                 max={tunable.max ?? undefined}
                 step={tunable.kind === 'float' ? 0.01 : 1}
@@ -131,18 +150,19 @@ export function SettingsPanel({onError}: SettingsPanelProps) {
         <section className="space-y-2" data-testid="settings-panel">
             <div className="flex items-center justify-between gap-2">
                 <h3 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    <Settings2 className="h-3.5 w-3.5"/> Cấu hình server
+                    <Settings2 className="h-3.5 w-3.5"/> Cấu hình hệ thống
                 </h3>
                 <span className="text-[11px] text-slate-500 dark:text-slate-400" data-testid="settings-state">
                     {data.overridden.length > 0 ? `${data.overridden.length} tham số đã đổi` : 'đang dùng mặc định'}
                 </span>
             </div>
 
-            <div className="max-h-60 space-y-1.5 overflow-y-auto pr-1">
-                {data.tunables.map((tunable) => (
-                    <div key={tunable.key} className="flex min-w-0 items-center justify-between gap-2">
+            {/* Cùng lưới 2 cột + label-trên/control-dưới như khối per-request phía trên */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {visible.map((tunable) => (
+                    <div key={tunable.key} className="flex min-w-0 flex-col gap-1.5">
                         <Label htmlFor={`setting-${tunable.key}`}
-                               className="min-w-0 flex-1 truncate text-xs font-normal text-slate-600 dark:text-slate-300"
+                               className="truncate text-xs font-normal text-muted-foreground"
                                title={tunable.description}>
                             {LABELS[tunable.key] ?? tunable.key}
                             {data.overridden.includes(tunable.key) && (
@@ -156,7 +176,7 @@ export function SettingsPanel({onError}: SettingsPanelProps) {
                 ))}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-1">
+            <div className="flex items-center justify-end gap-2">
                 {saved && <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Đã lưu</span>}
                 <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-[11px]"
                         onClick={() => void reset()} disabled={busy}>
@@ -167,9 +187,10 @@ export function SettingsPanel({onError}: SettingsPanelProps) {
                     Lưu {changed.length > 0 ? `(${changed.length})` : ''}
                 </Button>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="text-[11px] text-muted-foreground">
                 Áp dụng ngay, không cần restart. Tham số cần re-index (chunk size, embedding model) không đổi ở đây.
             </p>
         </section>
     );
 }
+

@@ -32,6 +32,8 @@ interface ChatComposerProps {
     model?: string;
     /** KB-9.6: cấu hình **hệ thống** (12 tham số server) — render ngay trong panel Tuỳ chọn. */
     systemSettings?: ReactNode;
+    /** Default của server cho 2 control per-request (hiện khi đang "auto"). */
+    serverDefaults?: {temperature?: number; maxTokens?: number};
 }
 
 /**
@@ -57,6 +59,7 @@ export function ChatComposer({
                                  maxTokensLimit,
                                  model,
                                  systemSettings,
+                                 serverDefaults,
                              }: ChatComposerProps) {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const canSend = value.trim().length > 0 && !isLoading;
@@ -148,7 +151,7 @@ export function ChatComposer({
                                 type="number"
                                 min={maxTokensLimit.min}
                                 max={maxTokensLimit.max}
-                                placeholder={`auto (server)`}
+                                placeholder={serverDefaults?.maxTokens ? `auto (${serverDefaults.maxTokens})` : 'auto (server)'}
                                 value={maxTokens ?? ''}
                                 onChange={(event) => {
                                     const raw = event.target.value.trim();
@@ -160,7 +163,9 @@ export function ChatComposer({
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <Label htmlFor="temperature" className="text-xs text-muted-foreground">
-                                Temperature: {temperature === null ? 'auto (server)' : temperature.toFixed(2)}
+                                Temperature: {temperature === null
+                                    ? `auto (server${serverDefaults?.temperature !== undefined ? `: ${serverDefaults.temperature}` : ''})`
+                                    : temperature.toFixed(2)}
                             </Label>
                             <Slider
                                 id="temperature"
@@ -174,7 +179,7 @@ export function ChatComposer({
                             />
                         </div>
                         {systemSettings && (
-                            <div className="sm:col-span-2 border-t border-border/60 pt-2">
+                            <div className="sm:col-span-2 border-t border-border/60 pt-1">
                                 {systemSettings}
                             </div>
                         )}
