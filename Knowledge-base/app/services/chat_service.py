@@ -181,8 +181,9 @@ class ChatService:
             conversation_id = str(uuid.uuid4())
 
         # Set parameters
-        max_tokens = max_tokens or self.settings.default_max_tokens
-        temperature = temperature or self.settings.default_temperature
+        # KB-9.1: so `is None` — `temperature or default` biến 0.0 thành 0.7 (0.0 là giá trị hợp lệ).
+        max_tokens = max_tokens if max_tokens is not None else self.settings.default_max_tokens
+        temperature = temperature if temperature is not None else self.settings.default_temperature
 
         try:
             # Initial retrieval (KB-5.4: câu hỏi nhiều ý ⇒ retrieve từng phần rồi gộp)
@@ -310,8 +311,9 @@ class ChatService:
         request_id = request_id or "-"
 
         # Set parameters
-        max_tokens = max_tokens or self.settings.default_max_tokens
-        temperature = temperature or self.settings.default_temperature
+        # KB-9.1: so `is None` — `temperature or default` biến 0.0 thành 0.7 (0.0 là giá trị hợp lệ).
+        max_tokens = max_tokens if max_tokens is not None else self.settings.default_max_tokens
+        temperature = temperature if temperature is not None else self.settings.default_temperature
 
         full_text = ""
         emitted_tokens = False
