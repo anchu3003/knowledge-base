@@ -104,6 +104,8 @@ function ChatPageInner() {
     );
     const {maxTokens, temperature} = answerSettings;
     const [formError, setFormError] = useState<string | null>(null);
+    // KB-9.6: default của server cho Temperature / Max tokens (hiện trong label khi "auto")
+    const [serverDefaults, setServerDefaults] = useState<{temperature?: number; maxTokens?: number}>({});
     const [isLoading, setIsLoading] = useState(false);
     // KB-4.11: pha truy hồi ↔ đang viết + đếm giây đã chờ
     const [requestStartedAt, setRequestStartedAt] = useState<number | null>(null);
@@ -559,7 +561,8 @@ function ChatPageInner() {
                         onUseServerDefaults={() => setAnswerSettings({maxTokens: null, temperature: null})}
                         usingServerDefaults={maxTokens === null && temperature === null}
                         maxTokensLimit={{min: MAX_TOKENS_MIN, max: MAX_TOKENS_MAX}}
-                        systemSettings={<SettingsPanel onError={setApiError}/>}
+                        serverDefaults={serverDefaults}
+                        systemSettings={<SettingsPanel inline onError={setApiError} onLoaded={setServerDefaults}/>}
 
                         model={typeof activeModel === 'string' ? activeModel : undefined}
                     />

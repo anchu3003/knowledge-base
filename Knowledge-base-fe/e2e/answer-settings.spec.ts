@@ -25,7 +25,8 @@ test.describe('Tham số trả lời (KB-9.2)', () => {
 
         // 1) Mặc định: "theo server" ⇒ body KHÔNG có max_tokens/temperature
         await expect(page.getByText('theo server', {exact: true})).toBeVisible();
-        await expect(page.getByLabel('Max tokens')).toHaveAttribute('placeholder', 'auto (server)');
+        // KB-9.6: khi "auto" thì placeholder hiện default của server (thay vì field trùng bên dưới)
+        await expect(page.getByLabel('Max tokens')).toHaveAttribute('placeholder', /auto \(\d+\)/);
 
         await page.getByRole('textbox').first().fill('Saga là gì?');
         await page.getByRole('button', {name: /Gửi|Tạo mới/i}).first().click();
