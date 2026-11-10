@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     # Default: Qwen3-Embedding-0.6B — multilingual (VN + EN), 1024-dim.
     embedding_model: str = Field(default="Qwen/Qwen3-Embedding-0.6B", alias="EMBEDDING_MODEL")
 
+    # Kiểu số thực khi chạy embedding trên CPU (TD-14). Model Qwen3 mặc định bf16, nhưng **CPU không có
+    # kernel bf16 nhanh** — đo 2026-11-10 (64 chunk, cùng model): bf16 **1,87 chunk/s** vs float32
+    # **8,11 chunk/s** ⇒ nhanh **4,3×** (601 chunk ~22 phút → ~1,3 phút).
+    # Đổi giá trị này ⇒ **phải re-index toàn bộ** (`DELETE /documents/clear` rồi `POST /documents/sync`):
+    # vector float32 và bfloat16 khác nhau về số ⇒ trộn 2 loại trong 1 collection làm retrieval lệch.
+    embedding_torch_dtype: str = Field(default="float32", alias="EMBEDDING_TORCH_DTYPE")
+
     # ChromaDB Settings
     chroma_db_path: str = Field(default="./chroma_db", alias="CHROMA_DB_PATH")
     collection_name: str = Field(default="documents", alias="COLLECTION_NAME")
@@ -51,6 +58,17 @@ class Settings(BaseSettings):
     # Giữ tối đa bao nhiêu session trong DB (Q&A KB-5.2 Q3 = 200). Vượt ⇒ xoá session cũ nhất.
     max_conversations: int = Field(default=200, alias="MAX_CONVERSATIONS")
 
+
+    # Index sync lúc khởi động (TD-25): chạy **nền** ⇒ app lên healthy ngay, trạng thái xem ở `/ready`
+    # (`checks.startup_sync`). Đặt `false` để quay lại hành vi cũ (await sync trong lifespan).
+    startup_sync_background: bool = Field(default=True, alias="STARTUP_SYNC_BACKGROUND")
+
+    # Rate limit phía server (TD-20): chặn 1 IP gọi dồn dập `/chat` + `/chat/stream` (mỗi câu tốn
+    # rerank CPU + quota provider). Cờ **TẮT mặc định** (như `AUTH_ENABLED`) ⇒ hành vi không đổi;
+    # bật khi mở ra LAN/VPS, đi cùng KB-5.5 auth.
+    rate_limit_enabled: bool = Field(default=False, alias="RATE_LIMIT_ENABLED")
+    rate_limit_max_requests: int = Field(default=30, alias="RATE_LIMIT_MAX_REQUESTS")
+    rate_limit_window_seconds: float = Field(default=60.0, alias="RATE_LIMIT_WINDOW_SECONDS")
 
     # CORS (KB-4.7): danh sách origin của FE, phân tách bằng dấu phẩy.
     # Mặc định gồm port dev 3000 và port compose 3010 (dời port để không trùng project khác).

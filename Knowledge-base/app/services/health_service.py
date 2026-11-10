@@ -52,6 +52,8 @@ class HealthService:
             document_service: Any = None,
             provider_probe: Optional[ProbeCallable] = None,
             deep: bool = False,
+            startup_sync: Any = None,
+            rate_limit: Optional[Dict[str, Any]] = None,
     ) -> Tuple[HealthPayload, int]:
         """Trả `(payload, http_status)`. `deep=True` mới gọi provider (tốn 1 request)."""
         checks: Dict[str, Dict[str, Any]] = {
@@ -59,8 +61,15 @@ class HealthService:
             "prompt_file": self._check_prompt_file(),
             "collection": self._check_collection(document_service),
         }
+        if startup_sync is not None:
+            # TD-25: sync chạy nền ⇒ đây là **thông tin**, không phải điều kiện sẵn sàng
+            # (chat vẫn trả lời được bằng index cũ).
+            checks["startup_sync"] = {"ok": True, "detail": _startup_sync_detail(startup_sync)}
+        if rate_limit is not None:
+            checks["rate_limit"] = _check_rate_limit(rate_limit)
         if deep:
             checks["provider"] = await self._check_provider(provider_probe)
+
 
         status = "ok"
         if not checks["provider_config"]["ok"] or not checks["prompt_file"]["ok"]:
@@ -143,3 +152,30 @@ def _secret_value(value: Any) -> str:
     if callable(getter):
         return str(getter() or "")
     return str(value)
+
+
+def _startup_sync_detail(state: Any) -> str:
+    """`StartupSyncState.detail()` nếu có; chấp nhận cả dict (dựng tay trong test)."""
+    if hasattr(state, "detail") and callable(state.detail):
+        return str(state.detail())
+    if isinstance(state, dict):
+        return str(state.get("detail") or state.get("status") or "unknown")
+    return "unknown"
+
+
+def _check_rate_limit(stats: Dict[str, Any]) -> Dict[str, Any]:
+    """Rate limit (TD-20) — **thông tin**: bật/tắt + hạn mức, không tính vào `status`.
+
+    Bật rate limit mà làm `/ready` đỏ thì sai: 429 cho client là hành vi mong muốn, không phải lỗi
+    readiness (cùng lý do KB-5.9 không cho prompt file làm 503).
+    """
+    if not stats.get("enabled"):
+        return {"ok": True, "detail": "rate limit tắt (RATE_LIMIT_ENABLED=false)"}
+    return {
+        "ok": True,
+        "detail": (
+            f"{stats.get('max_requests')} req / {stats.get('window_seconds')}s mỗi IP trên "
+            f"/chat + /chat/stream · đã chặn {stats.get('blocked', 0)}"
+        ),
+    }
+
