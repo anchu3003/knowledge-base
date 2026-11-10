@@ -1,471 +1,285 @@
-# RAG Chatbot API
+# RAG Chatbot API — Knowledge base cá nhân (backend)
 
-Retrieval-Augmented Generation (RAG) chatbot API for asking questions over your project documentation and files.
+FastAPI + LangChain + ChromaDB + Qwen3-Embedding + rerank cross-encoder local, sinh câu trả lời bằng
+**Groq** (OpenAI-compatible). Đây là **backend**; UI ở repo [`Knowledge-base-fe`](../Knowledge-base-fe/README.md),
+tổng quan hệ thống ở [`../README.md`](../README.md).
+> Link dạng `../` (`../docs/adr/`, `../Knowledge-base/`, `../README.md`) chỉ mở được khi workspace có đủ
+> root + 2 repo cạnh nhau (đúng cách repo này được dùng); trên GitLab chúng sẽ 404.
 
-This README consolidates the current, working setup based on the repository source. Outdated info from the previous README has been corrected. Unknown or unverified items are marked as TODO.
+
+> Số liệu trong file này **tính đến 2026-11-10**: **320 test** · **601 chunk / 56 file** · image Docker
+> **2,68 GB**. **Vì sao** các quyết định kiến trúc: [`../docs/adr/README.md`](../docs/adr/README.md) (17 ADR).
 
 ## Overview
 
-- Loads documents from `documents/` into a ChromaDB vector store
-- Retrieves relevant context and chats via OpenAI-compatible LLMs
-- Optional query rewrite, hybrid retrieval (dense + BM25), and re-ranking
-- Configurable system prompt from file
-- Run locally or with Docker/Docker Compose
+- **Index tăng dần**: so `sha256(nội dung file)` với index, chỉ embed file mới/đổi (~1,2 s/file) — không
+  clear index, chat vẫn trả lời trong lúc sync.
+- **Hybrid retrieval**: dense (Qwen3-Embedding, local CPU) + BM25 (sparse trong Chroma), `HYBRID_ALPHA=0.5`.
+- **Dedup + rerank**: gộp chunk gần trùng, cap 2 chunk/file, rerank `BAAI/bge-reranker-v2-m3` trên
+  `RERANK_TOP_N=6` ứng viên (p50 **3,44 s**/câu trên bộ vàng 20 câu).
+- **Streaming SSE** `start → token* → (end | error)` + heartbeat 15 s.
+- **Lịch sử bền**: SQLite (`./data/chat.db`, WAL), redact PII **trước khi lưu**.
+- **An toàn**: redaction PII ở cổng ra (mặc định BẬT); auth token tĩnh + rate limit per-IP (cả hai **mặc
+  định TẮT**, bật khi mở LAN/VPS).
 
 ## Tech Stack
 
-- Language: Python 3.13
-- Framework: FastAPI (served by Uvicorn)
-- RAG: LangChain, ChromaDB, sentence-transformers, BM25 re-ranking
-- Packaging: `requirements.txt` (pip)
-- Containerization: Docker, docker-compose
+| Thành phần | Chọn | Vì sao (ADR) |
+|---|---|---|
+| API | FastAPI ≥ 0.123 (Python 3.13) | async, SSE dễ, Pydantic schema |
+| LLM | Groq `openai/gpt-oss-120b` qua `ChatOpenAI` | free tier, nhanh — [ADR-0001](../docs/adr/0001-llm-provider-groq.md) |
+| Vector store | ChromaDB ≥ 1.3 `PersistentClient` | nhúng, sparse native cho hybrid — [ADR-0002](../docs/adr/0002-vector-store-chromadb.md) |
+| Embedding | `Qwen/Qwen3-Embedding-0.6B`, **float32**, CPU | đa ngữ VN+EN, private — [ADR-0003](../docs/adr/0003-embedding-model-qwen3.md) |
+| Rerank | `BAAI/bge-reranker-v2-m3` (CrossEncoder, CPU) | chất lượng top-k — [ADR-0006](../docs/adr/0006-rerank-cross-encoder.md) |
+| History | `sqlite3` stdlib + WAL | 0 hạ tầng — [ADR-0014](../docs/adr/0014-lich-su-chat-sqlite.md) |
 
 ## Requirements
 
-- Python 3.13+
-- pip
-- Docker and Docker Compose (optional, for containerized run)
+- Docker + Docker Compose (khuyến nghị), **hoặc** Python **3.13** + `uv` (dev tay).
+- RAM ~2 GB cho tiến trình (Qwen3 0.6B ~600 MB + reranker ~600 MB + Chroma).
+- Disk: model HF ~3,3 GB (volume `hf-cache`, **không** bake vào image).
+- `OPENAI_API_KEY` (Groq key) + `OPENAI_BASE_URL`.
 
 ## Quickstart (Docker Compose)
 
-Sau **KB-4.7**, `docker compose up` chạy **2 service**: `chatbot-api` (BE host **8010** → container 8000) +
-`chatbot-ui` (FE host **3010** → container 3000). Port dời để không trùng project khác (vd shoplab đang dùng 8080-8088).
-
-1) Copy `.env.example` to `.env` and update values.
-
-2) (Tuỳ chọn) đổi URL mà **browser** dùng để gọi BE — `NEXT_PUBLIC_*` nhúng vào bundle **lúc build**:
-
 ```bash
-# mặc định http://localhost:8000 (browser trên máy host gọi BE)
-export NEXT_PUBLIC_API_PROXY_URL=http://localhost:8010
-# tắt streaming SSE khi build FE
-export NEXT_PUBLIC_STREAMING=false
+cd Knowledge-base
+cp .env.example .env          # điền OPENAI_API_KEY + OPENAI_BASE_URL, KHÔNG commit .env
+docker compose up -d --build  # lần đầu ~60-90 s (build) + tải model ~3,3 GB vào volume
+docker compose ps             # chatbot-api phải "healthy"
 ```
 
-3) Start cả BE + FE:
+| Cổng | Ý nghĩa |
+|---|---|
+| **8010** | API trên **máy host** (`8010:8000` — dời port để không trùng project khác) |
+| 8000 | Port **trong container** (và port khi chạy uvicorn tay) |
+| 8010/docs | Swagger UI |
 
-```bash
-docker compose up -d --build
-docker compose ps            # cả 2 service phải "healthy"
-```
-
-4) Mở:
-
-- FE: http://localhost:3010 (panel **Kho tài liệu** ở header để xem index/readiness)
-- API docs: http://localhost:8010/docs
-
-Ghi chú vận hành:
-
-- `chatbot-ui` **không** mount source nữa (image là thứ sẽ deploy); FE chờ BE `healthy` mới start
-  (`depends_on: condition: service_healthy`).
-- **CORS**: BE chỉ cho origin trong env `ALLOWED_ORIGINS` (mặc định gồm 3000 và 3010) ⇒ đổi port FE phải cập nhật
-  biến này (hoặc export trước khi `up`).
-- `chatbot-api` chạy bằng **UID/GID của bạn** (`USER_ID`/`GROUP_ID`, mặc định `1000`) vì `./chroma_db` là bind mount
-  của user trên host — nếu image chạy uid 10001 (mặc định trong Dockerfile) thì ChromaDB báo
-  `attempt to write a readonly database`.
-- Model embedding/reranker nằm trong **named volume** `hf-cache` (~3.3GB). Lần `up` đầu tiên phải tải model
-  ⇒ `start_period` của healthcheck là **600s**. Muốn nhanh: copy sẵn cache từ máy:
-  ```bash
-  docker volume create knowledge-base_hf-cache
-  docker run --rm -v knowledge-base_hf-cache:/dst -v ~/.cache/huggingface:/src:ro busybox \
-    sh -c 'cp -a /src/. /dst/'
-  ```
-- Đổi code BE/FE ⇒ `docker compose up -d --build` lại (không còn hot-reload qua mount).
+Healthcheck nội bộ dùng `/health` (liveness — không chạm Chroma/provider, luôn 200 khi process sống).
 
 ## Local Setup (without Docker)
 
-1) Python environment (dev chuẩn: **WSL2 Ubuntu** — `AGENTS.md` §6, KB-7.1)
-
-- Create and activate a virtual environment.
-  - PowerShell (Windows):
-    ```powershell
-    python -m venv .venv; .\.venv\Scripts\Activate.ps1
-    ```
-  - macOS/Linux:
-    ```bash
-    python3 -m venv .venv && source .venv/bin/activate
-    ```
-
-2) Install dependencies
-
 ```bash
+cd Knowledge-base
+uv python install 3.13
+uv venv --python 3.13 .venv
 uv pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env                       # điền key
+.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-> Code đặt trên Linux FS (`~/projects/kb-khoa-hoc`), **không** dùng `/mnt/c|/mnt/d` (chậm với `torch`).
+- Model HF tải lần đầu (~3,3 GB) vào `~/.cache/huggingface`; sau đó cache.
+- **Không** dùng `--reload` khi đo eval/latency (reload làm nhiễu số đo).
 
-3) Configure environment
+## How it loads and chats with documents
 
-- Create `.env` in the project root (use `.env.example` as a starting point).
-
-4) Run the server
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-
-Open http://localhost:8000/docs
-
-5) Run tests
-
-```bash
-.venv/bin/python -m pytest -q     # 19 passed
+Interview/*.md ──scan+hash──► SyncPlan(added/updated/removed)
+        │                          │
+        │                          ├─ added/updated → chunk (heading → size 1000/200) → embed (fp32) → Chroma
+        │                          └─ removed       → xoá chunk theo metadata `source`
+        ▼
+   Chroma `documents` (601 chunk)  ──hybrid (dense+BM25)──► 20 ứng viên
+        │                                                    │
+        │                                    dedup + cap 2/file → rerank top-6
+        │                                                    ▼
+   question ─► multi-query split (≤3 part) ──────────► top-3 context (+ redact PII)
+                                                             ▼
+                                            Groq (gpt-oss-120b) → câu trả lời (+ sources)
 ```
-
-## How it Loads and Chats with Documents
-
-- On startup, if `AUTO_LOAD_ON_STARTUP=true`, the app recursively reads files under `DOCUMENTS_FOLDER` (default `./documents`) and indexes supported files into ChromaDB at `CHROMA_DB_PATH` (default `./chroma_db`).
-- During chat, it retrieves relevant chunks (`RETRIEVAL_K`, hybrid/BM25 if enabled), optionally re-ranks, builds context, and sends messages to the selected LLM.
 
 ## API Endpoints
 
-From `app/main.py`:
+| Method | Path | Mục đích | Khi nào dùng / ghi chú |
+|---|---|---|---|
+| GET | `/` | info API | smoke test |
+| GET | `/health` | liveness | healthcheck Docker — **luôn 200** khi process sống |
+| GET | `/ready` | readiness | `ok`/`degraded`/`error`; `?deep=true` gọi provider 1 request (`max_tokens=1`); có `checks.startup_sync` + `checks.rate_limit` |
+| POST | `/chat` | hỏi 1 lần | trả `response` + `sources` + `metadata` |
+| POST | `/chat/stream` | hỏi + SSE | `start → token* → (end\|error)`; heartbeat 15 s |
+| GET | `/conversations` | list hội thoại | metadata (id, title, updated_at), lazy-load |
+| GET | `/conversations/{id}` | chi tiết | messages đã redact |
+| DELETE | `/conversations/{id}` | xoá hội thoại | 404 nếu không có |
+| GET | `/documents/status` | trạng thái index | `document_count`, `index_version`, `rerank_cache`, `startup_sync` |
+| GET | `/documents/folder-info` | thông tin folder | số file hỗ trợ, `exists`, danh sách (≤20) |
+| POST | `/documents/sync` | **index tăng dần** | dùng hàng ngày — **không** xoá index |
+| POST | `/documents/refresh` | clear + index lại | chỉ khi index hỏng; **~7,3 phút** (601 chunk, fp32) |
+| DELETE | `/documents/clear` | xoá sạch index | không xoá file trên đĩa |
 
-- `GET /` — Health/info (returns status, message, version)
-- `POST /chat` — Chat with the RAG system
-- `POST /chat/stream` — Chat with server-sent events (SSE) streaming
+Guard: `/documents/sync` và `/documents/refresh` trả **409 `documents_folder_empty`** nếu folder không tồn
+tại hoặc 0 file hỗ trợ (nếu không sẽ xoá sạch index — KB-4.10).
 
-### SSE contract (KB-3.3)
+## Sync vs Refresh
 
-`POST /chat/stream` stream về theo thứ tự **`start → token* → (end | error)`** — luôn có đúng **một** event
-kết thúc, không bao giờ cắt ngang.
-
-```text
-data: {"type": "start", "conversation_id": "...", "metadata": {...}}
-
-data: {"type": "token", "token": "Xin "}
-
-: ping
-
-data: {"type": "end", "answer": "...", "sources": [...], "metadata": {...}}
-```
-
-- Event `error` dùng **cùng schema** envelope lỗi của `/chat`:
-  `{"type": "error", "error": {"code", "message", "request_id"}}` (`request_id` = header `X-Request-ID`).
-- Lỗi xảy ra **sau** khi đã stream ⇒ HTTP vẫn `200` (header đã gửi), client dựa vào event `error`.
-- **Heartbeat**: comment `: ping` nếu quá `SSE_HEARTBEAT_SECONDS` (default 15) không có event — giữ kết nối
-  qua proxy/idle timeout khi LLM chậm. Client SSE bỏ qua comment an toàn.
-- Header chống buffer/tắt cache: `Cache-Control: no-cache`, `X-Accel-Buffering: no`, `Connection: keep-alive`.
-- **Client disconnect** (đóng tab, `curl` timeout): generator dừng ngay, log mức `info` (không stack). Phần đã
-  trả lời **được giữ** trong history nếu đã phát ≥1 token, kèm `interrupted: true`; chưa có token thì bỏ.
-
-### Health & readiness (KB-3.4)
-
-| Endpoint | Vai trò | Chi phí |
+| | `POST /documents/sync` | `POST /documents/refresh` |
 |---|---|---|
-| `GET /health` | **liveness** — process còn sống ⇒ luôn `200` | rẻ: không chạm Chroma/provider |
-| `GET /ready` | **readiness** — đủ điều kiện trả lời? | rẻ: 3 check `provider_config` / `prompt_file` / `collection` |
-| `GET /ready?deep=true` | thêm check **gọi provider thật** (`max_tokens=1`) | tốn 1 request ⇒ mặc định **tắt**, chỉ dùng tay |
+| Cách làm | hash nội dung → chỉ embed file mới/đổi, xoá chunk của file đã bỏ | `clear_database()` rồi index lại toàn bộ |
+| Thời gian | **~1,2 s/file** (không đổi gì: **0,03 s**) | **~7,3 phút** cho 601 chunk (fp32) |
+| Chat trong lúc chạy | **vẫn trả lời** (index cũ còn) | **không** (index rỗng) |
+| Rủi ro | thấp (guard folder rỗng) | cao nếu folder sai → mất index |
+| Dùng khi | thêm/sửa/xoá file (hàng ngày, tự động lúc startup) | đổi `CHUNK_SIZE`/embedding/dtype, index hỏng |
 
-```json
-GET /health  →  {"status": "ok", "version": "1.0.0", "uptime_seconds": 12.34}
+Chi tiết vì sao: [ADR-0011](../docs/adr/0011-index-tang-dan-theo-hash.md).
 
-GET /ready   →  200
-{
-  "status": "ok",
-  "checks": {
-    "provider_config": {"ok": true,  "detail": "model=openai/gpt-oss-120b"},
-    "prompt_file":     {"ok": true,  "detail": "prompt file: system_prompt.txt"},
-    "collection":      {"ok": true,  "detail": "601 chunks indexed"}
-  }
-}
-```
+## Lịch sử hội thoại (KB-5.2)
 
-- `ok` (200) — dùng được đầy đủ.
-- `degraded` (200) — thiếu tài liệu (collection rỗng/lỗi): vẫn chat được, trả lời "không có trong knowledge base".
-- `error` (**503**) — thiếu cấu hình provider (`OPENAI_API_KEY`/`OPENAI_MODEL`/`OPENAI_BASE_URL`) hoặc thiếu
-  file prompt; hoặc `deep=true` mà provider không trả lời.
-- Response của `/ready` dùng body riêng (`status` + `checks`), **không** dùng envelope `{"error": ...}` của API
-  — vì đây là probe cho orchestrator, không phải response nghiệp vụ. `checks.*.detail` không chứa secret/`str(e)`.
-- Docker image có `HEALTHCHECK` trỏ `/health` (`--start-period=180s` vì lần đầu tải embedding model).
-
-```bash
-curl -s localhost:8000/health
-curl -s localhost:8000/ready
-curl -s "localhost:8000/ready?deep=true"   # kiểm key/provider thật (tốn 1 request)
-```
-- `POST /documents/refresh` — Clear and re-load from `DOCUMENTS_FOLDER`
-- `GET /documents/folder-info` — Inspect the docs folder and supported file counts
-- `GET /documents/status` — Status of the document store
-- `DELETE /documents/clear` — Clear all indexed documents
-
-OpenAPI docs: http://localhost:8000/docs
-
-### Error contract (KB-3.1)
-
-Mọi response lỗi dùng **một** envelope duy nhất (`app/core/errors.py`):
-
-```json
-{
-  "error": {
-    "code": "provider_rate_limited",
-    "message": "The language model provider rate limit was reached. Please retry later.",
-    "request_id": "19e63b57-00f9-4def-ac48-3f357ae0e79a"
-  }
-}
-```
-
-- `code` là **hằng số** → client switch theo `code`, đừng parse `message`.
-- `message` là message **chung**, không chứa chi tiết nội bộ. Chi tiết kỹ thuật (`str(e)`, host
-  provider, path, traceback) **chỉ** nằm trong log — tra bằng `request_id`.
-- `request_id` = header `X-Request-ID`. Client được gửi `X-Request-ID` của mình (chỉ `[A-Za-z0-9._-]`,
-  ≤ 64 ký tự, id không hợp lệ sẽ bị thay bằng uuid4) và server trả lại đúng id đó trong header + body lỗi.
-
-| code | HTTP | Khi nào |
-|---|---|---|
-| `validation_error` | 422 | body sai; kèm `error.details[]` = `loc`/`msg`/`type` (**không** echo giá trị client gửi) |
-| `not_found` | 404 | route/tài nguyên không tồn tại |
-| `method_not_allowed` | 405 | sai HTTP method |
-| `bad_request` / `forbidden` / `payload_too_large` | 400 / 403 / 413 | lỗi request phía framework |
-| `provider_auth_failed` | 502 | provider từ chối credential |
-| `provider_rate_limited` | 429 | provider hết quota/rate limit (Groq TPM) |
-| `provider_unavailable` | 503 | không gọi được provider (mạng/hạ tầng) |
-| `provider_timeout` | 504 | provider không trả lời kịp |
-| `service_unavailable` | 503 | service (chat/document) chưa khởi tạo xong |
-| `document_store_error` | 500 | lỗi thao tác trên vector store/tài liệu |
-| `internal_error` | 500 | lỗi không phân loại (stack chỉ ở log) |
-
-`POST /chat/stream` (SSE) giữ event `{"type": "error", "code", "message"}` với cùng ngữ nghĩa
-`code`/`message`; event `error` đầy đủ (kèm `request_id`) nằm ở KB-3.3.
+- SQLite tại `CHAT_DB_PATH` (mặc định `./data/chat.db`), `PRAGMA journal_mode=WAL` + `busy_timeout` ⇒ đọc
+  trong lúc ghi, không hỏng file khi container bị kill.
+- **Redact PII trước khi lưu** ⇒ reload có thể thấy `[REDACTED:email]` (trade-off có chủ ý — ADR-0007/0014).
+- `MAX_CONVERSATIONS=200`: vượt thì xoá session cũ nhất.
+- DB không mở được (quyền/volume) ⇒ app **vẫn chạy** với lịch sử in-memory, log warning.
 
 ## Environment Variables
 
-Defined in `app/core/config.py`. All can be provided via `.env`.
+Đối chiếu `app/core/config.py` (63 alias) ↔ `.env.example` bằng script (2026-11-10): **khớp 100%** sau khi
+bỏ 2 biến chết (`APP_NAME`, `APP_VERSION` — không có alias ⇒ không có tác dụng) và thêm
+`OPENAI_API_VERSION`.
 
-- OpenAI
-  - `OPENAI_API_KEY` (required)
-  - `OPENAI_BASE_URL` (required in most setups; see note below)
-  - `OPENAI_MODEL` (default: `gpt-3.5-turbo`)
-  - `OPENAI_EMBEDDING_MODEL` (default: `text-embedding-ada-002`)
-  - `OPENAI_API_TYPE` (default: `openai`)
-  - `OPENAI_API_VERSION` (default: `2023-05-15`)
+**Bắt buộc**
 
-- ChromaDB
-  - `CHROMA_DB_PATH` (default: `./chroma_db`)
-  - `COLLECTION_NAME` (default: `documents`)
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `OPENAI_API_KEY` | — | Groq key (dạng `gsk_…`) — **không** commit |
+| `OPENAI_BASE_URL` | — | `https://api.groq.com/openai/v1` |
+| `OPENAI_MODEL` | `gpt-3.5-turbo` | thực dùng `openai/gpt-oss-120b` |
 
-- Document Processing
-  - `CHUNK_SIZE` (default: `1000`)
-  - `CHUNK_OVERLAP` (default: `200`)
-  - `MAX_FILE_SIZE_MB` (default: `10`)
-  - `EMBEDDING_BATCH_SIZE` (default: `64`)
+**Dữ liệu & index**
 
-- Documents Folder
-  - `DOCUMENTS_FOLDER` (default: `./documents`)
-  - `AUTO_LOAD_ON_STARTUP` (default: `true`)
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `DOCUMENTS_FOLDER` | `Interview` | folder nguồn |
+| `AUTO_LOAD_ON_STARTUP` | `true` | sync lúc khởi động |
+| `STARTUP_SYNC_BACKGROUND` | `true` | sync chạy **nền** ⇒ app phục vụ ngay (KB-5.16) |
+| `CHROMA_DB_PATH` / `COLLECTION_NAME` | `./chroma_db` / `documents` | |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `200` | đổi ⇒ phải `refresh` (hash không đổi theo tham số chunk) |
+| `EMBEDDING_MODEL` | `Qwen/Qwen3-Embedding-0.6B` | đổi ⇒ re-index |
+| `EMBEDDING_TORCH_DTYPE` | `float32` | **CPU nhanh hơn bf16 ~3–4×**; đổi ⇒ re-index (KB-5.14) |
+| `EMBEDDING_BATCH_SIZE` | `64` | |
+| `SUPPORTED_EXTENSIONS` | `.md,.docx,.pdf,.txt,.json` | |
 
-- RAG Retrieval and Ranking
-  - `RETRIEVAL_K` (default: `5`)
-  - `SIMILARITY_THRESHOLD` (default: `0.0` = off) — cosine floor cho **dense candidates**; không áp cho
-    score hybrid/rerank. Đặt số khi chưa đo sẽ mất recall (0.7 từng làm `hit@k` 0.933 → 0.333), xem KB-2.5.
-  - `DEDUP_ENABLED` (default: `true`) — bỏ chunk gần trùng nội dung trước khi cắt top-k
-  - `DEDUP_JACCARD_THRESHOLD` (default: `0.8`) — ngưỡng Jaccard shingle 3-gram để coi là "gần trùng"
-  - `MAX_CHUNKS_PER_FILE` (default: `2`, `0` = off) — tối đa số chunk cùng 1 file trong top-k
-  - `ENABLE_BM25` (default: `true`)
-  - `ENABLE_HYBRID` (default: `true`)
-  - `HYBRID_ALPHA` (default: `0.5`)
-  - `HYBRID_CANDIDATE_K` (default: `20`)
-  - `ENABLE_RERANK` (default: `true`)
-  - `RERANK_TOP_N` (default: `20`)
-  - `RERANK_MODEL` (default: `BAAI/bge-reranker-v2-m3`)
+**Retrieval & rerank**
 
-- Chat
-  - `DEFAULT_TEMPERATURE` (default: `0.7`)
-  - `DEFAULT_MAX_TOKENS` (default: `1000`)
-  - `MAX_CONVERSATION_LENGTH` (default: `10`)
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `RETRIEVAL_K` | `3` | số chunk đưa vào prompt |
+| `ENABLE_BM25` / `HYBRID_ALPHA` / `HYBRID_CANDIDATE_K` | `true` / `0.5` / `20` | hybrid (ADR-0005) |
+| `SIMILARITY_THRESHOLD` | `0.0` | **để 0**: score hybrid đã normalize (0,7 làm `hit@k` sụp — ADR-0005) |
+| `DEDUP_ENABLED` / `DEDUP_JACCARD_THRESHOLD` / `MAX_CHUNKS_PER_FILE` | `true` / `0.8` / `2` | |
+| `ENABLE_RERANK` / `RERANK_MODEL` | `true` / `BAAI/bge-reranker-v2-m3` | |
+| `RERANK_TOP_N` | **`6`** | chốt bằng eval (ADR-0012): 20 → 9,7 s, 6 → 3,44 s, `MRR` như nhau |
+| `RERANK_CACHE_ENABLED` / `RERANK_CACHE_TTL_SECONDS` / `RERANK_CACHE_MAX_ENTRIES` | `true` / `3600` / `256` | **tắt khi đo eval** |
+| `MULTI_QUERY_ENABLED` / `MULTI_QUERY_MAX_PARTS` | `true` / `3` | heuristic split (ADR-0013) |
 
-- Provider resilience (KB-3.2) — Groq free tier chỉ có **TPM 8000**
-  - `PROVIDER_TIMEOUT_SECONDS` (default: `60`) — timeout của **một** call tới provider (đẩy vào SDK).
-  - `PROVIDER_MAX_RETRIES` (default: `2`) — số lần retry cho `429` / `5xx` / timeout / lỗi kết nối
-    (≈ tối đa 6s chờ với base 2s). `4xx` khác **không** retry. `ChatOpenAI(max_retries=0)` nên SDK
-    không retry — service là tầng retry duy nhất.
-  - `PROVIDER_RETRY_BASE_DELAY` (default: `2.0`) — base cho exponential backoff + **jitter** (`1–2s`, `2–4s`, …);
-    header `Retry-After` của provider (giây **hoặc** ms) được ưu tiên, cap ở `PROVIDER_TIMEOUT_SECONDS`.
-  - `PROVIDER_MAX_CONCURRENCY` (default: `1`) — số call provider đồng thời; `1` = **serialize** để 2 request
-    cùng lúc không đẩy TPM vượt hạn mức (query rewrite cũng đi qua cổng này, nhưng **không** retry).
+**Provider & streaming**
 
-- SSE (KB-3.3)
-  - `SSE_HEARTBEAT_SECONDS` (default: `15`) — gửi comment `: ping` nếu quá N giây không có event, để
-    proxy/idle timeout không cắt stream khi LLM chậm.
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `PROVIDER_MAX_CONCURRENCY` | **`1`** | tránh vượt TPM free tier (ADR-0008) |
+| `PROVIDER_MAX_RETRIES` / `PROVIDER_RETRY_BASE_DELAY` | `2` / `2.0` | backoff + jitter, đọc `Retry-After` |
+| `SSE_HEARTBEAT_SECONDS` | `15` | proxy idle timeout |
 
-- Prompt Files
-  - `SYSTEM_PROMPT_PATH` (default: `./prompts/system_prompt.txt`)
-  - `REWRITE_SYSTEM_PROMPT_PATH` (default: `./prompts/rewrite_system_prompt.txt`)
+**An toàn / vận hành**
 
-- Supported File Extensions
-  - `SUPPORTED_EXTENSIONS` — optional override for allowed extensions.
-    - Default in code: `[".md", ".docx", ".pdf", ".txt", ".json"]`
-    - Example in `.env.example`: `[".py", ".md", ".txt", ".json", ".yaml", ".yml", ".rst", ".docx", ".pdf"]`
+| Biến | Mặc định | Ghi chú |
+|---|---|---|
+| `ENABLE_PII_REDACTION` | `true` | redact ở cổng ra (ADR-0007) |
+| `PII_REDACT_INGEST` | `false` | bật ⇒ **lệch retrieval** (KB-1.2) |
+| `AUTH_ENABLED` / `API_TOKEN` | `false` / — | token tĩnh, header `X-API-Key`; bật mà token rỗng ⇒ chặn tất cả |
+| `RATE_LIMIT_ENABLED` / `RATE_LIMIT_MAX_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS` | `false` / `30` / `60` | `/chat` + `/chat/stream` (KB-5.15) |
+| `CHAT_DB_PATH` / `MAX_CONVERSATIONS` | `./data/chat.db` / `200` | |
+| `ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:3010,...` | CORS cho FE |
+| `LOG_LEVEL` | `INFO` | logger `app.*` |
 
-Note on `OPENAI_BASE_URL`:
-- The code expects it via env, but also initializes settings with an empty string for startup resilience. In practice, set a correct base URL (or use the default OpenAI endpoint for your chosen SDK/provider) to avoid runtime errors.
+## Prompts
 
-## Prompts Configuration
-
-You can configure prompts via files instead of hard-coding:
-
-1) Create folder:
-
-```
-prompts/
-```
-
-2) Create `prompts/system_prompt.txt` (may include `{context}` placeholder):
-
-```
-Bạn là trợ lý onboarding cho dự án RAG Chatbot API.\n
-══════════════════════════════════════════
-NGỮ CẢNH LIÊN QUAN TỪ TÀI LIỆU:
-══════════════════════════════════════════
-{context}
-
-Hướng dẫn trả lời:
-- Trả lời ngắn gọn, có trích dẫn file/đường dẫn khi có thể
-- Giải thích các thuật ngữ kỹ thuật khi cần
-```
-
-3) Optional: `prompts/rewrite_system_prompt.txt` for the query rewrite step (no placeholders required):
-
-```
-You are a query reformulation assistant for a RAG system.
-Rewrite the user's query to better retrieve relevant documentation.
-Guidelines:
-- Be concise (5-25 words).
-- Expand with key technical terms when helpful.
-- Do NOT answer; output only the rewritten query.
-```
-
-4) Add paths in `.env`:
-
-```env
-SYSTEM_PROMPT_PATH=./prompts/system_prompt.txt
-REWRITE_SYSTEM_PROMPT_PATH=./prompts/rewrite_system_prompt.txt
-```
-
-Notes:
-- If the files are missing or cannot be read, the app falls back to built-in prompts.
-- Docker mounts the project into the container (`.:/app`), so keep the `prompts/` folder in the project root.
+`SYSTEM_PROMPT_PATH` (mặc định `prompts/system_prompt.txt`). Thiếu file ⇒ **không** làm `/ready` đỏ: chat
+dùng prompt fallback dựng sẵn trong code (KB-5.9).
 
 ## Running and Scripts
 
-- Uvicorn (local): `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
-- Dockerfile entrypoint: Uvicorn command above
-- Docker Compose services (KB-4.7): `chatbot-api` (BE, `8010:8000`) + `chatbot-ui` (FE, `3010:3000`)
-  - BE volumes: `./chroma_db:/app/chroma_db`, `hf-cache:/hf-cache` (named volume, chứa model HF)
-  - FE: build từ `../Knowledge-base-fe` với `build.args` (`NEXT_PUBLIC_API_PROXY_URL`, `NEXT_PUBLIC_STREAMING`),
-    **không** mount source, `depends_on: chatbot-api (service_healthy)`
-
-Common commands:
-- Build and run: `docker compose up -d --build` (lần đầu tải model ~3.3GB ⇒ FE chỉ start khi BE healthy)
-- Trạng thái/health: `docker compose ps`
-- Stop: `docker compose down` (thêm `-v` nếu muốn xoá luôn volume `hf-cache`)
-- Logs: `docker compose logs -f chatbot-api` hoặc `chatbot-ui`
+```bash
+.venv/bin/python -m pytest -q                      # test
+.venv/bin/python -m uvicorn app.main:app --port 8000
+docker compose up -d --build                       # build + chạy (host 8010)
+docker build -t kb-be:local .                      # chỉ build image
+```
 
 ## Project Structure
 
 ```
-knowledge-base/
-├─ app/
-│  ├─ core/
-│  │  └─ config.py
-│  ├─ models/
-│  │  └─ schemas.py
-│  ├─ services/
-│  │  ├─ chat_service.py
-│  │  └─ document_service.py
-│  └─ main.py
-├─ chroma_db/              # Vector DB (created/populated at runtime)
-├─ documents/              # Place your source docs here
-├─ prompts/
-│  ├─ system_prompt.txt
-│  └─ rewrite_system_prompt.txt
-├─ .env                    # Your environment variables (not committed)
-├─ .env.example
-├─ requirements.txt
-├─ docker-compose.yml
-└─ Dockerfile
+Knowledge-base/
+├── app/
+│   ├── main.py                # routes + middleware + error handlers + lifespan
+│   ├── core/                  # config, errors, auth, rate_limit, middleware, sse, embeddings,
+│   │                          # provider_retry (cổng gọi provider), logging_setup
+│   ├── services/              # document_service (index/retrieval/rerank), chat_service,
+│   │                          # index_sync (hash+diff), rerank_cache, multi_query, dedup,
+│   │                          # pii_service, conversation_store, startup_sync, health_service
+│   └── models/schemas.py      # pydantic request/response
+├── tests/                     # 320 test (pytest) + builders.py (BASE_SETTINGS 1 chỗ)
+├── eval/                      # run_eval.py + qa_set.json (20 câu) + runs/*.json
+├── prompts/system_prompt.txt
+├── data/                      # chat.db (SQLite, KHÔNG commit)
+├── Dockerfile · docker-compose.yml · .env.example
 ```
 
 ## Testing
 
-- Unit/integration tests live in `tests/` (PII redaction, ingest redaction, embedding config,
-  error contract + `X-Request-ID` trong `tests/test_error_contract.py`). Run:
-  ```bash
-  .venv/bin/python -m pytest -q
-  ```
-- Retrieval/answer quality is measured by the eval harness (see below), not by unit tests.
-
-### Test API (KB-3.5 — trả TD-4)
-
-Test tầng HTTP dùng `TestClient` + **fake service** qua `app.dependency_overrides`: không load model,
-không mở ChromaDB, không gọi mạng, **không chạy lifespan** ⇒ chạy offline, rất nhanh.
-
 ```bash
-cd Knowledge-base
-.venv/bin/python -m pytest tests/test_api_endpoints.py tests/test_api_errors.py tests/test_api_stream.py -q
-# 28 passed in 0.13s
+$ .venv/bin/python -m pytest -q
+320 passed, 1 warning in 1.15s
 ```
 
-| File | Bảo vệ contract |
-|---|---|
-| `tests/conftest.py` | fixture `api_client` (override `get_chat_service` / `get_document_service`), fake service, `health_service_factory` |
-| `tests/test_api_endpoints.py` | happy path: `/`, `/health`, `/ready` (ok / degraded / error), `/chat`, `/documents/status\|refresh\|clear\|folder-info` |
-| `tests/test_api_errors.py` | envelope `{"error": {code, message, request_id}}`: 422 / 404 / 405 / 429 / 502 / 503 / 504 / 500, echo `X-Request-ID`, **không lộ** `str(e)` / URL provider / traceback |
-| `tests/test_api_stream.py` | SSE: `start → token* → end`, event `error` + `request_id`, header chống buffer |
-
-Toàn bộ suite: `.venv/bin/python -m pytest -q` (**164 passed**, ~1s).
+Nguyên tắc: **không** chạy lifespan, **không** load model/Chroma, **không** gọi mạng — service giả qua
+`app.dependency_overrides` (`tests/conftest.py`), settings giả qua `tests/builders.BaseSettings`.
 
 ## Đo chất lượng RAG (eval harness)
 
-Bộ đo chất lượng retrieval + grounding, dùng làm baseline cho Phase 2 (`Backlog.md` KB-2.1).
-Chạy từ thư mục `Knowledge-base/`:
-
 ```bash
-# 1) (Tuỳ chọn) index lại DOCUMENTS_FOLDER — cần collection trước khi đo
-.venv/bin/python eval/run_eval.py --build-index --limit 1
+# 1) (Tuỳ chọn) index lại trước khi đo
+curl -X POST http://localhost:8010/documents/sync
 
-# 2) Đo retrieval — KHÔNG gọi LLM, không tốn quota
-.venv/bin/python eval/run_eval.py --mode retrieval --tag baseline
-.venv/bin/python eval/run_eval.py --mode retrieval --rerank off   # bỏ qua reranker (nhanh, không tải model 2.3GB)
+# 2) Đo retrieval — KHÔNG gọi LLM, không tốn quota, tắt cache cho số thật
+RERANK_CACHE_ENABLED=false .venv/bin/python eval/run_eval.py --mode retrieval --tag my-change
 
 # 3) Đo câu trả lời thật qua Groq (/chat) — tốn 1 request/câu
-.venv/bin/python eval/run_eval.py --mode full --tag baseline
+.venv/bin/python eval/run_eval.py --mode full --tag my-change
 ```
 
-Bộ câu hỏi vàng: `eval/qa_set.json` (`question`, `expected_files`, `expected_keywords`).
-Kết quả in ra bảng markdown + snapshot JSON ở `eval/runs/`.
+Kết quả ghi vào `eval/runs/<timestamp>-<tag>-retrieval.json` (kèm **config đầy đủ** để tái lập).
 
-| Metric | Ý nghĩa | Mode |
-|---|---|---|
-| `hit_at_k` | tỉ lệ câu có >= 1 `expected_file` nằm trong top-k | retrieval |
-| `mrr` | mean reciprocal rank của file kỳ vọng đầu tiên | retrieval |
-| `dup_ratio` | tỉ lệ cặp chunk trong top-k gần trùng (Jaccard shingle 3-gram >= 0.8) | retrieval |
-| `precision_at_k` | tỉ lệ hit trong top-k trỏ đúng file kỳ vọng (precision của ngữ cảnh) | retrieval |
-| `distinct_file_ratio` | tỉ lệ file khác nhau trong top-k (1.0 = không lặp file; 0.2 = 5 hit cùng 1 file) | retrieval |
-| `latency_p50` | trung vị thời gian 1 query (giây) | cả hai |
-| `citation_presence` | tỉ lệ câu trả lời có nhãn `[S1]`, `[S2]`, … (bất kỳ đâu) | full |
-| `inline_citation_presence` | tỉ lệ câu trả lời có nhãn **trong thân bài** (không chỉ dòng `Nguồn:` cuối) | full |
-| `answer_keyword_hit` | tỉ lệ câu trả lời chứa keyword kỳ vọng | full |
+| Run | Cấu hình | `hit@k` | `MRR` | `prec@k` | p50 |
+|---|---|---|---|---|---|
+| `kb54-before` | top-N 20, không multi-query | 1,0 | 0,975 | 0,533 | 9,70 s |
+| `kb54-after` | top-N 20 + multi-query | 1,0 | 0,975 | 0,617 | 6,50 s |
+| `kb54-control-topn4` | top-N 4, multi-query **off** (control) | 1,0 | **1,0** | 0,55 | **2,00 s** |
+| **`kb58-top6-mq-fullpart`** (chốt) | top-N 6 + multi-query + chấm đủ dài | 1,0 | 0,975 | **0,617** | **3,44 s** |
 
-Flag hữu ích: `--limit N` (chạy thử N câu), `--k N` (override `RETRIEVAL_K`),
-`--rerank {env,on,off}` (override `ENABLE_RERANK`), `--sleep N` (nghỉ giữa các câu ở `--mode full`
-để không bị Groq `429` TPM), `--tag` (nhãn snapshot).
-
-> Lưu ý PII: `--mode full` gửi câu hỏi + context lên LLM provider. Context đi qua `PIIRedactor`
-> trước khi ra ngoài, nhưng tài liệu vẫn là note cá nhân → cân nhắc trước khi chạy.
+Cách đọc: mọi thay đổi retrieval phải có cặp run trước/sau; khi nghi ngờ thì chạy **control run** — bài
+học KB-5.4 ([ADR-0010](../docs/adr/0010-eval-la-cong-chat-luong.md)).
 
 ## Troubleshooting
 
-- Packages missing locally: ensure your venv is active and run `pip install -r requirements.txt`.
-- Connection issues:
-  - Verify `OPENAI_API_KEY` and `OPENAI_BASE_URL`
-  - Check network access to your endpoint
-- Reduce telemetry/noise in containers: the Dockerfile already sets env vars to disable Chroma and LangChain telemetry.
+| Triệu chứng | Nguyên nhân thường gặp | Xử lý |
+|---|---|---|
+| `/ready` = `degraded`, `collection is empty` | index chưa có / đã clear | `POST /documents/sync` (hoặc `refresh`) |
+| `409 documents_folder_empty` | `DOCUMENTS_FOLDER` sai hoặc bị `.dockerignore` loại | kiểm `docker compose exec chatbot-api ls /app/Interview` |
+| Container khởi động rất lâu lần đầu | tải model ~3,3 GB vào volume `hf-cache` | chờ lần đầu; các lần sau ~10 s |
+| `sqlite3.OperationalError: unable to open database file` | volume `./data` chưa có / quyền ghi | `mkdir -p data && chmod u+w data` (app vẫn chạy, chỉ mất lịch sử) |
+| `429 provider_rate_limited` | vượt TPM free tier (8.000 TPM) | chờ; giữ `PROVIDER_MAX_CONCURRENCY=1`; giảm `RETRIEVAL_K` |
+| `429 rate_limited` | rate limit của mình (`RATE_LIMIT_*`) | chờ theo `Retry-After` hoặc tắt cờ |
+| Câu trả lời chậm ~3–4 s mỗi câu **mới** | rerank CPU là chi phí thật | câu lặp đã có cache; muốn nhanh hơn: giảm `RERANK_TOP_N` (mất precision) |
+| Đổi `CHUNK_SIZE`/`EMBEDDING_*` mà kết quả không đổi | `sync` chỉ so **nội dung file** | `DELETE /documents/clear` → `POST /documents/sync` |
+| Rerank cache không hit sau restart | cache là **in-process** (TD-28) | bình thường; hit lại sau vài câu |
 
 ## License
 
-TODO: Add a license file and specify the license here.
+MIT.
 
 ## Acknowledgements
 
-- FastAPI, LangChain, ChromaDB, sentence-transformers, and related open-source projects.
+- [LangChain](https://github.com/langchain-ai/langchain) · [ChromaDB](https://www.trychroma.com/) ·
+  [sentence-transformers](https://www.sbert.net/) · [Groq](https://groq.com/) · [FastAPI](https://fastapi.tiangolo.com/)
+
+
+
