@@ -120,6 +120,7 @@ export function SourcesPanel({
 
     const model = typeof metadata?.model === 'string' ? metadata.model : null;
     const retrieved = typeof metadata?.retrieved_documents === 'number' ? metadata.retrieved_documents : null;
+    const dropped = typeof metadata?.dropped_sources === 'number' ? metadata.dropped_sources : 0;
 
     return (
         // KB-4.9: `w-full min-w-0` — nếu để auto-width trong cột `items-start`, panel lấy max-content
@@ -169,7 +170,18 @@ export function SourcesPanel({
                         />
                     ))}
 
-                    {(model || retrieved !== null) && (
+                    {/* KB-9.4: nói rõ vì sao ít/không có nguồn — nguồn bị loại do điểm dưới ngưỡng */}
+            {dropped > 0 && (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400" data-testid="dropped-sources">
+                    Đã bỏ {dropped} nguồn có điểm liên quan dưới ngưỡng
+                    {typeof metadata?.relevance_min_score === 'number' && metadata.relevance_min_score > 0
+                        ? ` (${metadata.relevance_min_score})`
+                        : ''}
+                    .
+                </p>
+            )}
+
+            {(model || retrieved !== null) && (
                         <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500 dark:text-slate-400">
                             {model && <span className="font-mono">{model}</span>}
                             {model && retrieved !== null && <span aria-hidden="true">·</span>}

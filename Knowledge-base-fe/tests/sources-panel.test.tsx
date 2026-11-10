@@ -80,6 +80,20 @@ describe('SourcesPanel (KB-4.3 + KB-9.3 thu gọn)', () => {
         expect(screen.getByRole('button', {name: /Thu gọn/})).toBeInTheDocument();
     });
 
+
+    it('KB-9.4: hiện "Đã bỏ N nguồn" khi metadata có dropped_sources', () => {
+        render(<SourcesPanel sources={sources} defaultOpen
+                              metadata={{dropped_sources: 2, relevance_min_score: 0.02}}/>);
+
+        expect(screen.getByTestId('dropped-sources')).toHaveTextContent('Đã bỏ 2 nguồn');
+        expect(screen.getByTestId('dropped-sources')).toHaveTextContent('0.02');
+    });
+
+    it('không có nguồn bị bỏ ⇒ không hiện ghi chú', () => {
+        render(<SourcesPanel sources={sources} defaultOpen metadata={{dropped_sources: 0}}/>);
+        expect(screen.queryByTestId('dropped-sources')).toBeNull();
+    });
+
     it('không có nguồn ⇒ render rỗng', () => {
         const {container} = render(<SourcesPanel sources={[]}/>);
 

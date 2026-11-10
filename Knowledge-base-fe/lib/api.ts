@@ -19,6 +19,7 @@ import type {
     FolderInfo,
     HealthStatus,
     ReadinessStatus,
+    SettingsResponse,
 } from './types';
 import { createSseParser, isAbortError, parseChatEvent, type ChatStreamEvent } from './sse';
 
@@ -363,6 +364,31 @@ export async function deleteConversation(conversationId: string): Promise<{ mess
 }
 
 /** `DELETE /documents/clear` — xoá sạch index (không xoá file trên đĩa). */
+/**
+ * KB-9.4: cấu hình chỉnh được **lúc chạy** (`GET /settings`).
+ * `tunables` cho biết tham số nào đổi được + min/max để dựng control; `defaults` là giá trị env của server.
+ */
+export async function getSettings(): Promise<SettingsResponse> {
+    return apiFetch<SettingsResponse>('/settings');
+}
+
+/** Áp một phần tham số; BE validate min/max + whitelist (422 `invalid_setting` nếu sai). */
+export async function updateSettings(
+    values: Record<string, number | boolean>,
+): Promise<{values: Record<string, number | boolean>; overridden: string[]}> {
+    return apiFetch('/settings', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(values),
+    });
+}
+
+/** Trả mọi tham số về default của server (env). */
+export async function resetSettings(): Promise<{values: Record<string, number | boolean>; overridden: string[]}> {
+    return apiFetch('/settings/reset', {method: 'POST'});
+}
+
+
 export async function clearDocuments(): Promise<{ message: string }> {
     return apiFetch<{ message: string }>('/documents/clear', { method: 'DELETE' });
 }

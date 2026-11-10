@@ -87,6 +87,10 @@ export interface ChatMetadata {
     /** KB-5.4: câu hỏi nhiều ý được tách thành các phần này (rỗng/không có = retrieve 1 bước). */
     multi_query_parts?: string[]
     multi_query_enabled?: boolean
+    /** KB-9.4: số nguồn bị loại vì điểm rerank dưới ngưỡng liên quan. */
+    dropped_sources?: number
+    /** KB-9.4: ngưỡng đang áp dụng (0 = tắt lọc). */
+    relevance_min_score?: number
     [key: string]: unknown
 }
 
@@ -219,4 +223,25 @@ export interface ConversationDetail {
     created_at: string
     updated_at: string
     messages: ConversationMessage[]
+}
+
+// ------------------------------
+// KB-9.4: cấu hình chỉnh được lúc chạy (`GET /settings`)
+// ------------------------------
+export interface RuntimeSetting {
+    key: string
+    kind: 'int' | 'float' | 'bool'
+    min: number | null
+    max: number | null
+    description: string
+}
+
+export interface SettingsResponse {
+    /** Giá trị đang có hiệu lực. */
+    values: Record<string, number | boolean>
+    /** Giá trị mặc định của server (env lúc khởi động). */
+    defaults: Record<string, number | boolean>
+    /** Tham số người dùng đã đổi (khác default). */
+    overridden: string[]
+    tunables: RuntimeSetting[]
 }
