@@ -110,6 +110,20 @@ test.describe('Shell & layout', () => {
         await page.goto('/');
         await expect(page.locator('header')).toContainText('Knowledge Base');
         await expect(page.getByRole('button', {name: 'Kho tài liệu'})).toHaveCount(1);
+
+        // KB-5.13: brand đứng TRƯỚC nút "Lịch sử" (cả DOM order lẫn vị trí thị giác)
+        const brand = page.getByRole('link', {name: /Knowledge Base/});
+        const historyButton = page.getByRole('button', {name: 'Mở lịch sử trò chuyện'});
+        const order = await page.evaluate(() => {
+            const brandEl = document.querySelector('header a');
+            const historyEl = document.querySelector('header button[aria-label="Mở lịch sử trò chuyện"]');
+            return brandEl && historyEl
+                ? Boolean(brandEl.compareDocumentPosition(historyEl) & Node.DOCUMENT_POSITION_FOLLOWING)
+                : false;
+        });
+        expect(order, 'brand phải đứng trước nút Lịch sử trong DOM').toBe(true);
+        const [brandBox, historyBox] = await Promise.all([brand.boundingBox(), historyButton.boundingBox()]);
+        expect(brandBox!.x + brandBox!.width).toBeLessThanOrEqual(historyBox!.x + 0.5);
         await expect(page.locator('header button[data-theme-mode]')).toBeVisible();
         await page.screenshot({path: 'test-results/shot-01-home.png'});
     });

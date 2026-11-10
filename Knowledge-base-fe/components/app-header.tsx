@@ -37,6 +37,15 @@ export function AppHeader({onOpenDocuments, renderSidebar, sessionCount}: AppHea
 
     return (
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 bg-background/85 px-3 backdrop-blur">
+            {/* KB-5.13: brand đứng TRƯỚC nút "Lịch sử" (trước đây nút Lịch sử nằm trước brand). */}
+            <Link href="/" className="flex min-w-0 items-center gap-2">
+                <span
+                    className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
+                    KB
+                </span>
+                <span className="truncate text-sm font-semibold text-foreground">Knowledge Base</span>
+            </Link>
+
             {renderSidebar && (
                 <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
                     <SheetTrigger asChild>
@@ -56,14 +65,6 @@ export function AppHeader({onOpenDocuments, renderSidebar, sessionCount}: AppHea
                     </SheetContent>
                 </Sheet>
             )}
-
-            <Link href="/" className="flex min-w-0 items-center gap-2">
-                <span
-                    className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
-                    KB
-                </span>
-                <span className="truncate text-sm font-semibold text-foreground">Knowledge Base</span>
-            </Link>
 
             <div className="ml-auto flex items-center gap-1">
                 <Tooltip>
