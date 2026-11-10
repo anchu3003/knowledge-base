@@ -131,6 +131,13 @@ class Settings(BaseSettings):
 
     # Prompt Settings
     # Path to the system prompt template file. The template may contain a `{context}` placeholder.
+    # Auth tối giản (KB-5.5) — **mặc định TẮT** để hành vi local không đổi; bật khi mở LAN/VPS:
+    #   AUTH_ENABLED=true + API_TOKEN=<chuỗi dài>   (client gửi header `X-API-Key`)
+    # Bật mà `API_TOKEN` rỗng ⇒ **fail-closed** (chặn tất cả), không phải "cho qua".
+    # Endpoint công khai khi bật: `/` và `/health` (healthcheck Docker KB-3.4).
+    auth_enabled: bool = Field(default=False, alias="AUTH_ENABLED")
+    api_token: str = Field(default="", alias="API_TOKEN")
+
     # KB-5.9 (trả TD-18): level cho logger `app.*` (INFO thấy được log thật thay vì chỉ print).
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     system_prompt_path: str = Field(default="./prompts/system_prompt.txt", alias="SYSTEM_PROMPT_PATH")

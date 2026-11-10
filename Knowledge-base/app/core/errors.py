@@ -125,6 +125,18 @@ class ConversationStoreError(AppError):
     public_message = "The conversation history operation failed."
 
 
+class UnauthorizedError(AppError):
+    """Thiếu/sai token khi bật auth (KB-5.5) → 401.
+
+    Middleware `ApiKeyMiddleware` dựng response trực tiếp (pure ASGI), nhưng vẫn khai báo class này để
+    tài liệu/tham chiếu thống nhất một code `unauthorized` trong taxonomy KB-3.1.
+    """
+
+    code = "unauthorized"
+    http_status = 401
+    public_message = "Missing or invalid API key."
+
+
 class NotFoundError(AppError):
     """Không tìm thấy tài nguyên → 404."""
 
