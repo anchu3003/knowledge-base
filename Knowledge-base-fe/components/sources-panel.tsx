@@ -10,9 +10,10 @@
  * - Key React là `citation_id` (BE sinh **theo từng response**), không dùng index của mảng.
  */
 
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useId, useRef, useState} from 'react';
 import {ChevronDown, ChevronUp, FileText, Star} from 'lucide-react';
 import type {ChatMetadata, ChatSource} from '@/lib/types';
+
 
 /** Giả định (c) của ticket: snippet hiện tối đa ~400 ký tự rồi "Xem thêm". */
 const SNIPPET_PREVIEW_LENGTH = 400;
@@ -65,6 +66,15 @@ interface SourcesPanelProps {
     highlightCitationId?: string;
     /** Nonce tăng mỗi lần bấm ⇒ bấm lại cùng một chip vẫn scroll/highlight lại. */
     highlightNonce?: number;
+    /** KB-9.3: mở sẵn khi mount (mặc định **đóng** — nguồn chỉ chiếm 1 dòng). */
+    defaultOpen?: boolean;
+}
+
+/** Dòng tóm tắt khi panel đóng: `Saga Pattern.md +2` (tên file đầu + số còn lại). */
+export function collapsedSummary(sources: ChatSource[]): string {
+    const first = sources[0]?.file_name || sources[0]?.file_path || 'không rõ nguồn';
+    const rest = sources.length - 1;
+    return rest > 0 ? `${first} +${rest}` : first;
 }
 
 export function SourcesPanel({
@@ -72,15 +82,27 @@ export function SourcesPanel({
                                  metadata,
                                  highlightCitationId,
                                  highlightNonce,
+                                 defaultOpen = false,
                              }: SourcesPanelProps) {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    /**
+     * KB-9.3: mặc định đóng; mở bằng nút, **hoặc** tự mở khi user vừa bấm chip `[S#]`.
+     *
+     * `manual` ghi lại lần bấm nút **kèm `nonce` hiện tại** ⇒ một highlight **mới** (nonce khác) luôn
+     * thắng trạng thái đóng vừa bấm, còn bấm đóng khi highlight đang hiện thì đóng được (nonce trùng).
+     * Dùng state thay vì `setState` trong effect (`react-hooks/set-state-in-effect`).
+     */
+    const [manual, setManual] = useState<{open: boolean; nonce?: number} | null>(null);
+    const highlightWins = Boolean(highlightCitationId) && manual?.nonce !== highlightNonce;
+    const open = highlightWins ? true : (manual?.open ?? defaultOpen);
     // Khởi tạo từ prop để card đúng được highlight ngay từ render đầu (không nháy), đồng thời SSR verify được.
     const [highlighted, setHighlighted] = useState<string | null>(highlightCitationId ?? null);
     const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const panelId = useId();
 
-    // Scroll + highlight card khi bấm chip `[S#]` trong câu trả lời.
+    // Bấm chip `[S#]` ⇒ panel đã mở (derive ở trên) ⇒ card đã render ⇒ scroll + highlight ~2s.
     useEffect(() => {
-        if (!highlightCitationId) return;
+        if (!highlightCitationId || !open) return;
         const card = cardRefs.current[highlightCitationId];
         if (!card) return;
         card.scrollIntoView({behavior: 'smooth', block: 'center'});
@@ -90,7 +112,9 @@ export function SourcesPanel({
             HIGHLIGHT_DURATION_MS
         );
         return () => clearTimeout(timer);
-    }, [highlightCitationId, highlightNonce]);
+    }, [highlightCitationId, highlightNonce, open]);
+
+
 
     if (sources.length === 0) return null;
 
@@ -101,43 +125,64 @@ export function SourcesPanel({
         // KB-4.9: `w-full min-w-0` — nếu để auto-width trong cột `items-start`, panel lấy max-content
         // (phụ thuộc font/độ dài path) và thò ra ngoài bubble → trông lệch và tràn ngang.
         <section className="mt-1 w-full min-w-0 space-y-2" aria-label="Nguồn tham khảo">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                <FileText className="h-4 w-4"/>
-                <span>Nguồn ({sources.length})</span>
-            </div>
+            <button
+                type="button"
+                onClick={() => setManual({open: !open, nonce: highlightNonce})}
+                aria-expanded={open}
+                aria-controls={panelId}
+                data-testid="sources-toggle"
+                className="flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-muted/60 dark:text-slate-400 dark:hover:bg-slate-800"
+            >
+                <FileText className="h-4 w-4 shrink-0"/>
+                <span className="shrink-0">Nguồn ({sources.length})</span>
+                {!open && (
+                    <span className="min-w-0 truncate text-[11px] font-normal text-slate-500 dark:text-slate-400"
+                          data-testid="sources-summary">
+                        {collapsedSummary(sources)}
+                    </span>
+                )}
+                {open ? (
+                    <ChevronUp className="ml-auto h-4 w-4 shrink-0"/>
+                ) : (
+                    <ChevronDown className="ml-auto h-4 w-4 shrink-0"/>
+                )}
+            </button>
 
-            <div className="space-y-2">
-                {sources.map((source, index) => (
-                    <SourceCard
-                        key={citationLabel(source, index)}
-                        source={source}
-                        index={index}
-                        expanded={expanded[citationLabel(source, index)] ?? false}
-                        highlighted={highlighted === citationLabel(source, index)}
-                        onToggle={() =>
-                            setExpanded((prev) => ({
-                                ...prev,
-                                [citationLabel(source, index)]: !prev[citationLabel(source, index)],
-                            }))
-                        }
-                        registerRef={(node) => {
-                            cardRefs.current[citationLabel(source, index)] = node;
-                        }}
-                    />
-                ))}
-            </div>
+            {open && (
+                <div id={panelId} className="space-y-2">
+                    {sources.map((source, index) => (
+                        <SourceCard
+                            key={citationLabel(source, index)}
+                            source={source}
+                            index={index}
+                            expanded={expanded[citationLabel(source, index)] ?? false}
+                            highlighted={highlighted === citationLabel(source, index)}
+                            onToggle={() =>
+                                setExpanded((prev) => ({
+                                    ...prev,
+                                    [citationLabel(source, index)]: !prev[citationLabel(source, index)],
+                                }))
+                            }
+                            registerRef={(node) => {
+                                cardRefs.current[citationLabel(source, index)] = node;
+                            }}
+                        />
+                    ))}
 
-            {(model || retrieved !== null) && (
-                <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    {model && <span className="font-mono">{model}</span>}
-                    {model && retrieved !== null && <span aria-hidden="true">·</span>}
-                    {retrieved !== null && <span>{retrieved} tài liệu đã truy hồi</span>}
-                    {/* PiiBadge giữ ở header message (KB-1.3) để không lặp icon khi có nguồn — xem Backlog KB-4.3. */}
+                    {(model || retrieved !== null) && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            {model && <span className="font-mono">{model}</span>}
+                            {model && retrieved !== null && <span aria-hidden="true">·</span>}
+                            {retrieved !== null && <span>{retrieved} tài liệu đã truy hồi</span>}
+                            {/* PiiBadge giữ ở header message (KB-1.3) để không lặp icon khi có nguồn — xem Backlog KB-4.3. */}
+                        </div>
+                    )}
                 </div>
             )}
         </section>
     );
 }
+
 
 interface SourceCardProps {
     source: ChatSource;
