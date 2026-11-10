@@ -82,7 +82,7 @@ interface ChatMessagesProps {
  * Danh sách message (KB-4.8) — tách khỏi `page.tsx`.
  *
  * Thay đổi so với bản onboarding: bubble **full-width** (bỏ `max-w-md`), bỏ gradient tự phát,
- * dùng token `bg-card`/`border-border` ⇒ đọc được ở cả light và dark.
+ * dùng token `bg-card`/`text-card-foreground` ⇒ đọc được ở cả light và dark (KB-5.11: bỏ border mờ).
  */
 export function ChatMessages({
     messages,
@@ -117,10 +117,10 @@ export function ChatMessages({
                         <div className={`flex min-w-0 max-w-full flex-1 flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
                             <div
                                 data-testid={`bubble-${message.role}`}
-                                className={`w-fit max-w-[88%] rounded-2xl border px-3.5 py-2.5 shadow-xs ${
+                                className={`w-fit max-w-[88%] rounded-2xl px-3.5 py-2.5 shadow-xs ${
                                     isUser
-                                        ? 'border-primary/30 bg-primary text-primary-foreground'
-                                        : 'border-border bg-card text-card-foreground'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-card text-card-foreground'
                                 }`}
                             >
                                 {!isUser && (message.metadata?.pii_redacted_count ?? 0) > 0 && (
@@ -187,7 +187,7 @@ export function ChatMessages({
                     <Avatar className="mt-0.5 hidden sm:flex">
                         <AvatarFallback>AI</AvatarFallback>
                     </Avatar>
-                    <div className="w-full max-w-[calc(100%-1rem)] space-y-2 rounded-2xl border border-border bg-card px-3.5 py-3">
+                    <div className="w-full max-w-[calc(100%-1rem)] space-y-2 rounded-2xl bg-card px-3.5 py-3">
                         <Skeleton className="h-3 w-1/3"/>
                         <Skeleton className="h-3 w-5/6"/>
                         <Skeleton className="h-3 w-2/3"/>

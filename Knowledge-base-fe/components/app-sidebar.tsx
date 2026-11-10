@@ -4,18 +4,16 @@ import {MessageSquare, Plus, Trash2} from 'lucide-react';
 
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
-import {ScrollArea} from '@/components/ui/scroll-area';
-import {Separator} from '@/components/ui/separator';
 
 /**
- * Sidebar (KB-4.8) — thay `chat-history-sidebar.tsx` bản cũ (`fixed` + `ml-64` thủ công).
+ * Danh sách hội thoại — **chỉ** render trong ngăn kéo (`Sheet`) từ KB-5.11.
  *
- * 2 chỗ dùng:
- * - Desktop (≥768px): cột trái `hidden md:flex` trong `app/page.tsx`.
- * - Mobile (<768px): cùng nội dung render trong `Sheet` (drawer trượt từ trái) ở `app-header.tsx`.
+ * Trước KB-5.11: vừa là cột cố định 256px ở desktop (`AppSidebar`), vừa là nội dung drawer mobile ⇒ chat bị
+ * thu hẹp + nhiều đường kẻ chia cắt. Nay bỏ cột, bỏ `Separator`/border dòng: phân cấp bằng **khoảng cách + nền**
+ * (active `bg-primary/10`, hover `bg-muted`).
  *
- * ⇒ tách `SidebarContent` (thuần props, không tự định vị) khỏi `AppSidebar` (khung cột).
- * *KB-4.9: bỏ nút "Kho tài liệu" ở đây — trùng với nút ở header (chỉ giữ 1 chỗ, góc trên phải).*
+ * Nút xoá: trước đây `opacity-0 group-hover:opacity-100` ⇒ **vô hình** với người dùng (bị báo là "mất nút xoá").
+ * Nay luôn hiển thị, chỉ đổi màu khi hover.
  */
 
 export interface ChatSession {
@@ -31,7 +29,7 @@ export interface SidebarContentProps {
     onSelectSession: (sessionId: string) => void;
     onNewChat: () => void;
     onDeleteSession: (sessionId: string) => void;
-    /** Đóng drawer mobile sau khi chọn (Sheet); desktop không truyền ⇒ no-op */
+    /** Đóng ngăn kéo sau khi chọn (Sheet luôn truyền) */
     onAfterAction?: () => void;
 }
 
@@ -50,24 +48,25 @@ export function SidebarContent({
 
     return (
         <div className="flex h-full flex-col bg-sidebar">
-            <div className="p-3">
+            <div className="p-3 pb-2">
                 <Button className="w-full justify-start gap-2" onClick={handle(onNewChat)}>
                     <Plus className="size-4"/>
                     Cuộc trò chuyện mới
                 </Button>
             </div>
 
-            <Separator/>
-
-            <div className="flex items-center justify-between px-3 py-2">
+            <div className="flex items-center justify-between px-4 pb-1 pt-2">
                 <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                     Lịch sử
                 </span>
                 <Badge variant="muted">{sessions.length}</Badge>
             </div>
 
-            <ScrollArea className="flex-1">
-                <ul className="space-y-1 px-2 pb-3">
+            {/* KB-5.11: dùng scroll thường thay `ScrollArea` (Radix) — viewport của Radix bọc nội dung trong
+                `display: table`, nên tiêu đề dài làm dòng rộng quá ngăn kéo và **đẩy nút xoá ra ngoài**
+                (đo được: nút ở x=363 trong khi drawer rộng 288). */}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+                <ul className="w-full space-y-0.5 px-2 pb-3">
                     {sessions.length === 0 && (
                         <li className="px-2 py-6 text-center text-xs text-muted-foreground">
                             Chưa có cuộc trò chuyện nào
@@ -83,12 +82,12 @@ export function SidebarContent({
                         />
                     ))}
                 </ul>
-            </ScrollArea>
+            </div>
         </div>
     );
 }
 
-/** Một dòng session trong sidebar (tách riêng cho dễ đọc; nút xoá chỉ hiện khi hover/focus). */
+/** Một dòng session trong ngăn kéo. Không border; nút xoá **luôn nhìn thấy** (KB-5.11). */
 function SessionRow({
                         session,
                         active,
@@ -107,10 +106,8 @@ function SessionRow({
                 onClick={onSelect}
                 aria-current={active ? 'true' : undefined}
                 aria-label={`${session.title} (${session.messageCount} tin nhắn)`}
-                className={`flex w-full items-start gap-2 rounded-lg border px-2.5 py-2 pr-8 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
-                    active
-                        ? 'border-primary/40 bg-primary/10'
-                        : 'border-transparent hover:border-border hover:bg-muted/60'
+                className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 pr-9 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+                    active ? 'bg-primary/10' : 'hover:bg-muted'
                 }`}
             >
                 <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground"/>
@@ -123,19 +120,11 @@ function SessionRow({
                 type="button"
                 onClick={onDelete}
                 aria-label={`Xoá cuộc trò chuyện ${session.title}`}
-                className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                title="Xoá cuộc trò chuyện"
+                className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
                 <Trash2 className="size-3.5"/>
             </button>
         </li>
-    );
-}
-
-/** Cột cố định cho desktop — ẩn dưới `md` (mobile dùng `Sheet` trong `AppHeader`). */
-export function AppSidebar(props: SidebarContentProps) {
-    return (
-        <aside className="hidden w-64 shrink-0 border-r border-border md:flex md:flex-col">
-            <SidebarContent {...props}/>
-        </aside>
     );
 }

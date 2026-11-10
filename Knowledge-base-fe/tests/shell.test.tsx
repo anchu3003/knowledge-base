@@ -53,14 +53,32 @@ describe('AppHeader (KB-4.8)', () => {
         expect(onOpenDocuments).toHaveBeenCalledOnce();
     });
 
-    it('có nút mở menu mobile (chỉ hiện ở < md) khi truyền renderMobileSidebar', () => {
+    it('có nút "Lịch sử" (mở ngăn kéo) khi truyền renderSidebar — hiện ở mọi kích thước (KB-5.11)', async () => {
+        const user = userEvent.setup();
         render(
             <TooltipProvider>
-                <AppHeader onOpenDocuments={vi.fn()} renderMobileSidebar={() => <div>sidebar</div>}/>
+                <AppHeader onOpenDocuments={vi.fn()} renderSidebar={() => <div>sidebar</div>} sessionCount={3}/>
             </TooltipProvider>,
         );
 
-        expect(screen.getByRole('button', {name: 'Mở menu'})).toBeInTheDocument();
+        const trigger = screen.getByRole('button', {name: 'Mở lịch sử trò chuyện'});
+        expect(trigger).toBeInTheDocument();
+        expect(trigger).not.toHaveClass('md:hidden'); // không còn chỉ-hiện-trên-mobile
+        expect(screen.getByText('3')).toBeInTheDocument(); // Badge số phiên
+
+        await user.click(trigger);
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText('sidebar')).toBeInTheDocument();
+    });
+
+    it('không còn hamburger "Mở menu" cũ (KB-5.11)', () => {
+        render(
+            <TooltipProvider>
+                <AppHeader onOpenDocuments={vi.fn()} renderSidebar={() => <div>sidebar</div>}/>
+            </TooltipProvider>,
+        );
+
+        expect(screen.queryByRole('button', {name: 'Mở menu'})).not.toBeInTheDocument();
     });
 });
 
@@ -92,6 +110,25 @@ describe('SidebarContent (KB-4.8)', () => {
         renderSidebar();
         expect(screen.queryByRole('button', {name: 'Mở kho tài liệu'})).not.toBeInTheDocument();
         expect(screen.queryByText('Kho tài liệu')).not.toBeInTheDocument();
+    });
+
+    it('nút xoá LUÔN hiển thị, không cần hover (KB-5.11 — bug "mất nút xoá")', () => {
+        renderSidebar();
+
+        for (const title of ['Ôn phỏng vấn RAG', 'Ghi chú Docker']) {
+            const button = screen.getByRole('button', {name: `Xoá cuộc trò chuyện ${title}`});
+            expect(button).toBeVisible();
+            // bug cũ: `opacity-0 group-hover:opacity-100` ⇒ vô hình cho tới khi rê chuột
+            expect(button.className).not.toMatch(/opacity-0/);
+        }
+    });
+
+    it('không còn đường kẻ trang trí trong danh sách (KB-5.11)', () => {
+        const {container} = renderSidebar();
+
+        // không có `Separator` (role=separator) và không dùng class border trên dòng session
+        expect(container.querySelector('[role="separator"]')).toBeNull();
+        expect(container.innerHTML).not.toMatch(/\bborder-border\b/);
     });
 
     it('rỗng thì hiện empty state + nút chat mới', async () => {

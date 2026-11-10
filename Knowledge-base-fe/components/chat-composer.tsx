@@ -50,7 +50,7 @@ export function ChatComposer({
     const canSend = value.trim().length > 0 && !isLoading;
 
     return (
-        <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur">
+        <div className="sticky bottom-0 bg-background/95 backdrop-blur">
             {/*
               Canh mép (KB-4.9): cột chat là `max-w-3xl` + `px-3`, trong mỗi hàng message có avatar
               (2.25rem) + gap (0.625rem) ⇒ bubble bị thụt vào 2.875rem mỗi bên.
@@ -119,7 +119,7 @@ export function ChatComposer({
                 </div>
 
                 {showAdvanced && (
-                    <div className="mt-2 grid grid-cols-1 gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-2">
+                    <div className="mt-2 grid grid-cols-1 gap-3 rounded-xl bg-muted/40 p-3 sm:grid-cols-2">
                         <div className="flex flex-col gap-1.5">
                             <Label htmlFor="max-tokens" className="text-xs text-muted-foreground">
                                 Max tokens
