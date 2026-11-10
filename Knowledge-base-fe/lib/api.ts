@@ -26,6 +26,8 @@ export const API_BASE_URL: string =
     (process.env.NEXT_PUBLIC_API_PROXY_URL as string) || 'http://localhost:8000';
 
 export const REQUEST_ID_HEADER = 'X-Request-ID';
+/** Header token khi bật auth (KB-5.5) — BE đọc `X-API-Key`. */
+export const API_KEY_HEADER = 'X-API-Key';
 
 /** Code do FE tự sinh khi không có response HTTP (mất mạng, CORS, BE tắt). */
 export const NETWORK_ERROR_CODE = 'network_error';
@@ -99,14 +101,50 @@ function isTimeoutError(error: unknown): boolean {
 /**
  * Gọi API và trả JSON đã parse. Ném `ApiError` cho mọi lỗi (mạng / HTTP / body sai contract).
  */
+/** Key `localStorage` chứa API token khi bật auth (KB-5.5). */
+export const API_TOKEN_KEY = 'kb.api_token';
+
+/** Cờ build-time: `NEXT_PUBLIC_AUTH_ENABLED=true` ⇒ UI yêu cầu token. Mặc định **tắt**. */
+export const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true';
+
+/**
+ * Token đang lưu (runtime, **không** nhúng vào bundle): `NEXT_PUBLIC_*` là công khai nên token không được nằm
+ * trong biến môi trường — chỉ đọc từ `localStorage` do người dùng nhập (Q&A KB-5.5).
+ */
+export function readApiToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        const token = window.localStorage.getItem(API_TOKEN_KEY);
+        return token && token.trim() ? token.trim() : null;
+    } catch {
+        // private mode / chặn storage — coi như chưa có token
+        return null;
+    }
+}
+
+export function saveApiToken(token: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+        const trimmed = token.trim();
+        if (trimmed) window.localStorage.setItem(API_TOKEN_KEY, trimmed);
+        else window.localStorage.removeItem(API_TOKEN_KEY);
+    } catch {
+        // bỏ qua: người dùng sẽ được hỏi lại
+    }
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
+
+    const token = readApiToken();
 
     try {
         response = await fetch(`${API_BASE_URL}${path}`, {
             ...init,
             headers: {
                 'Content-Type': 'application/json',
+                // KB-5.5: chỉ gửi khi có token (BE mặc định không bật auth ⇒ header thừa không gây lỗi).
+                ...(token ? {[API_KEY_HEADER]: token} : {}),
                 ...(init?.headers || {}),
             },
         });
