@@ -30,6 +30,7 @@ from app.core.errors import (
     http_status_error,
 )
 from app.core.logging_setup import configure_logging
+from app.core.auth import ApiKeyMiddleware
 from app.core.middleware import RequestIDMiddleware, get_request_id
 from app.core.sse import SSE_HEADERS, sse_event_stream
 from app.services.document_service import DocumentService
@@ -172,6 +173,10 @@ app.add_middleware(
 
 # request_id cho mọi request (KB-3.1): thêm SAU CORS để middleware này là lớp ngoài cùng
 # ⇒ response lỗi (kể cả 500 của ServerErrorMiddleware) vẫn có header X-Request-ID.
+# KB-5.5: auth token tĩnh — thêm **TRƯỚC** RequestID để RequestID nằm ngoài cùng (Starlette: middleware thêm
+# sau cùng là lớp ngoài). Nhờ vậy response 401 vẫn có `request_id` + header `X-Request-ID` do RequestID gắn.
+# Mặc định `AUTH_ENABLED=false` ⇒ middleware trả qua ngay, hành vi không đổi.
+app.add_middleware(ApiKeyMiddleware)
 app.add_middleware(RequestIDMiddleware)
 
 logger = logging.getLogger(__name__)
