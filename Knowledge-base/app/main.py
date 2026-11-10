@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import time
 import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,12 +33,15 @@ from app.core.errors import (
 )
 from app.core.logging_setup import configure_logging
 from app.core.auth import ApiKeyMiddleware
+from app.core.rate_limit import RateLimitMiddleware, SlidingWindowLimiter
 from app.core.middleware import RequestIDMiddleware, get_request_id
 from app.core.sse import SSE_HEADERS, sse_event_stream
 from app.services.document_service import DocumentService
 from app.services.chat_service import ChatService
 from app.services.conversation_store import ConversationStore
 from app.services.health_service import HealthService
+from app.services.startup_sync import StartupSyncState
+
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
@@ -54,12 +59,58 @@ document_service: Optional[DocumentService] = None
 chat_service: Optional[ChatService] = None
 health_service: Optional[HealthService] = None
 conversation_store: Optional[ConversationStore] = None
+# TD-25: trạng thái job sync lúc khởi động (chạy nền) — đọc được từ `/ready` + `/documents/status`.
+startup_sync_state: Optional[StartupSyncState] = None
+
+
+
+async def _run_startup_sync(
+        service: "DocumentService",
+        state: StartupSyncState,
+        supported: int,
+) -> None:
+    """Chạy index sync lúc khởi động **ở nền** (TD-25) và ghi trạng thái vào `state`.
+
+    Không raise ra ngoài: lỗi sync không được làm chết app (index cũ vẫn dùng được — cùng nguyên tắc
+    KB-4.10/KB-5.1). Trạng thái đọc qua `/ready` (`checks.startup_sync`) và `/documents/status`.
+    """
+    state.start()
+    started = time.monotonic()
+    try:
+        summary = await service.sync_documents()
+    except asyncio.CancelledError:
+        # Shutdown giữa lúc sync ⇒ ghi lại để lần sau biết (index giữ nguyên, sync lại lúc restart).
+        state.fail("CancelledError")
+        logging.getLogger(__name__).warning("startup sync cancelled during shutdown")
+        raise
+    except Exception as exc:
+        state.fail(type(exc).__name__)
+        logging.getLogger(__name__).warning(
+            "startup sync failed: %s: %s — vẫn phục vụ với index cũ",
+            type(exc).__name__,
+            exc,
+        )
+        return
+
+    state.finish(summary)
+    logging.getLogger(__name__).info(
+        "startup sync done: files=%s +%s ~%s -%s unchanged=%s chunks=%s %.1fs",
+        supported,
+        len(summary.get("added") or []),
+        len(summary.get("updated") or []),
+        len(summary.get("removed") or []),
+        summary.get("unchanged"),
+        summary.get("total_chunks"),
+        time.monotonic() - started,
+    )
+
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+
     """Initialize services on startup and cleanup on shutdown"""
-    global document_service, chat_service, health_service, conversation_store
+    global document_service, chat_service, health_service, conversation_store, startup_sync_state
 
     document_service = None
     chat_service = None
@@ -105,20 +156,31 @@ async def lifespan(application: FastAPI):
             raise
 
         # Index tăng dần lúc khởi động (KB-5.1, Q&A Q1 = nút Đồng bộ + tự động khi start)
+        # TD-25: mặc định chạy **nền** ⇒ app nhận request ngay, trạng thái xem ở `/ready`.
+        startup_sync_state = StartupSyncState()
+        application.state.startup_sync = startup_sync_state
         if setting.auto_load_on_startup:
             documents_folder = Path(setting.documents_folder)
             supported = count_supported_files(documents_folder, setting.supported_extensions)
             # Guard: folder rỗng/không tồn tại ⇒ KHÔNG sync (nếu sync, mọi file đang có index sẽ bị coi là "đã xoá"
             # và bị xoá khỏi vector store — đúng lỗi mất dữ liệu mà KB-4.10 đã chặn cho `/documents/refresh`).
             if not documents_folder.exists() or supported == 0:
-                print(
-                    f"Skip startup sync: folder '{documents_folder}' "
-                    f"(exists={documents_folder.exists()}, supported_files={supported})"
+                reason = f"folder không tồn tại hoặc 0 file hỗ trợ (exists={documents_folder.exists()})"
+                startup_sync_state.skip(reason)
+                print(f"Skip startup sync: {reason}")
+            elif getattr(setting, "startup_sync_background", True):
+                print(f"Startup sync chạy nền: '{documents_folder}' ({supported} file hỗ trợ)...")
+                task = asyncio.create_task(
+                    _run_startup_sync(document_service, startup_sync_state, supported),
+                    name="startup-index-sync",
                 )
+                # Giữ tham chiếu để task không bị GC giữa đường (asyncio chỉ weak-ref task).
+                application.state.startup_sync_task = task
             else:
                 print(f"Syncing documents from '{documents_folder}' ({supported} file hỗ trợ)...")
                 try:
                     summary = await document_service.sync_documents()
+                    startup_sync_state.finish(summary)
                     print(
                         "Startup sync: "
                         f"+{len(summary['added'])} mới, ~{len(summary['updated'])} cập nhật, "
@@ -127,10 +189,12 @@ async def lifespan(application: FastAPI):
                     )
                 except Exception as e:
                     # Không chặn startup: app vẫn chạy được với index hiện có (chỉ thiếu file mới)
+                    startup_sync_state.fail(type(e).__name__)
                     print(f"Warning: startup sync failed: {type(e).__name__}: {str(e)}")
                     print("Continuing startup with the existing index...")
 
         print("RAG Chatbot API initialized successfully")
+
     except Exception as e:
         print(f"Fatal error during startup: {str(e)}")
         import traceback
@@ -178,6 +242,27 @@ app.add_middleware(
 # Mặc định `AUTH_ENABLED=false` ⇒ middleware trả qua ngay, hành vi không đổi.
 app.add_middleware(ApiKeyMiddleware)
 app.add_middleware(RequestIDMiddleware)
+# TD-20: rate limit per-IP cho `/chat` + `/chat/stream`. Thêm **trước** RequestID/ApiKey ⇒ nằm trong
+# cùng (RequestID vẫn là lớp ngoài cùng để 429 có `request_id`). Cờ `RATE_LIMIT_ENABLED=false` mặc định
+# ⇒ middleware trả qua ngay, hành vi không đổi.
+_rate_limit_settings = get_settings()
+_rate_limiter = SlidingWindowLimiter(
+    int(getattr(_rate_limit_settings, "rate_limit_max_requests", 30) or 30),
+    float(getattr(_rate_limit_settings, "rate_limit_window_seconds", 60.0) or 60.0),
+)
+app.add_middleware(RateLimitMiddleware, limiter=_rate_limiter)
+
+
+def rate_limit_stats() -> dict:
+    """Số liệu rate limit cho `/ready` (không lộ IP/key)."""
+    return {
+        "enabled": bool(getattr(get_settings(), "rate_limit_enabled", False)),
+        "max_requests": _rate_limiter.max_requests,
+        "window_seconds": _rate_limiter.window_seconds,
+        "blocked": _rate_limiter.blocked,
+    }
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -319,8 +404,11 @@ async def ready(
         document_service=document_service,
         provider_probe=provider_probe,
         deep=deep,
+        startup_sync=startup_sync_state,
+        rate_limit=rate_limit_stats(),
     )
     return JSONResponse(status_code=http_status, content=payload)
+
 
 
 def count_supported_files(folder: Path, extensions) -> int:
@@ -576,7 +664,12 @@ async def get_document_status(
     """Get the status of the document database"""
     try:
         status_info = await service.get_status()
+        # TD-25: kèm trạng thái job sync lúc khởi động ⇒ biết "đang index nền" hay "đã xong/ lỗi"
+        # mà không phải đọc log container.
+        if startup_sync_state is not None:
+            status_info["startup_sync"] = startup_sync_state.as_dict()
         return JSONResponse(content=status_info)
+
     except AppError:
         raise
     except Exception as e:
