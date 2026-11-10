@@ -375,13 +375,18 @@ export async function getHealth(): Promise<HealthStatus> {
 /**
  * `GET /ready` — readiness. BE trả **503** kèm payload `{status, checks}` khi `error`
  * ⇒ **không** dùng `apiFetch` (nó ném lỗi theo HTTP status), đọc body trước rồi mới quyết định.
+ *
+ * `deep=true` (TD-23): BE gọi provider **1 request `max_tokens=1`** ⇒ biết key còn sống hay không
+ * (không chỉ "có cấu hình"). Tốn quota ⇒ chỉ gọi khi user bấm nút, **không** gọi lúc mở panel.
  */
-export async function getReady(): Promise<ReadinessStatus> {
+export async function getReady(options?: { deep?: boolean }): Promise<ReadinessStatus> {
+    const query = options?.deep ? '?deep=true' : '';
     let response: Response;
 
     try {
-        response = await fetch(`${API_BASE_URL}/ready`, {headers: {Accept: 'application/json'}});
+        response = await fetch(`${API_BASE_URL}/ready${query}`, {headers: {Accept: 'application/json'}});
     } catch {
+
         throw new ApiError({
             code: NETWORK_ERROR_CODE,
             message: 'Không kết nối được tới server.',
