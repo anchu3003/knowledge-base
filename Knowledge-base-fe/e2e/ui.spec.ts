@@ -105,6 +105,16 @@ async function expectSourcesWithinColumn(page: Page) {
     expect(overflowsContainer, 'nội dung nguồn tràn trong panel').toBeLessThanOrEqual(2);
 }
 
+/** KB-9.3: panel nguồn mặc định **đóng** ⇒ mở ra trước khi kiểm layout/bố cục bên trong. */
+async function expandSources(page: Page) {
+    const toggle = page.getByTestId('sources-toggle').first();
+    await expect(toggle).toBeVisible();
+    if ((await toggle.getAttribute('aria-expanded')) === 'false') {
+        await toggle.click();
+    }
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
+
 test.describe('Shell & layout', () => {
     test('header có brand, đúng MỘT nút "Kho tài liệu", toggle theme', async ({page}) => {
         await page.goto('/');
@@ -247,6 +257,61 @@ test.describe('Kho tài liệu (Sheet)', () => {
 
 
 test.describe('Panel Nguồn', () => {
+    // KB-9.3: nguồn mặc định thu gọn; mở bằng nút, hoặc mở đúng card khi bấm chip [S1].
+    test('mặc định THU GỌN; nút mở/đóng; bấm chip [S1] thì tự mở + highlight', async ({page}) => {
+        await seedSession(page, {
+            title: 'Hi',
+            question: 'Hi',
+            answer: 'Saga dùng compensating transaction [S1] để giữ eventual consistency [S2].',
+            sources: [
+                {
+                    citation_id: 'S1',
+                    chunk_id: '29442be8aaaaaaaa',
+                    file_name: 'Saga Pattern.md',
+                    file_path: 'Interview/Backend&Devops/Design Patterns/Saga Pattern.md',
+                    file_type: 'md',
+                    relevance_score: 0.93,
+                    heading_path: 'Saga Pattern > Compensating',
+                    snippet: 'Compensating transactions undo previous local transactions.',
+                },
+                {
+                    citation_id: 'S2',
+                    chunk_id: '48d9c2edcccccccc',
+                    file_name: 'Distributed Transactions.md',
+                    file_path: 'Interview/Backend&Devops/Distributed Transactions.md',
+                    file_type: 'md',
+                    relevance_score: 0.71,
+                    heading_path: 'Eventual consistency',
+                    snippet: 'Eventual consistency means reads converge over time.',
+                },
+            ],
+        });
+        await page.goto('/');
+
+        const toggle = page.getByTestId('sources-toggle').first();
+        await expect(toggle).toBeVisible();
+        // 1) Mặc định đóng: có tóm tắt 1 dòng, không có card
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(page.getByTestId('sources-summary').first()).toContainText('Saga Pattern.md');
+        await expect(page.getByTestId('source-card-S1')).toHaveCount(0);
+        await page.screenshot({path: 'test-results/shot-16-sources-collapsed.png', fullPage: true});
+
+        // 2) Bấm nút ⇒ mở (2 card) ⇒ bấm lại ⇒ đóng
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.getByTestId('source-card-S1')).toHaveCount(1);
+        await expect(page.getByTestId('source-card-S2')).toHaveCount(1);
+        await toggle.click();
+        await expect(page.getByTestId('source-card-S1')).toHaveCount(0);
+
+        // 3) Bấm chip [S1] trong câu trả lời ⇒ panel tự mở + card S1 được highlight
+        await page.getByRole('button', {name: /S1/}).first().click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.getByTestId('source-card-S1')).toBeVisible();
+        await expect(page.getByTestId('source-card-S1')).toHaveClass(/ring-2/, {timeout: 3_000});
+        await page.screenshot({path: 'test-results/shot-17-sources-opened-by-chip.png', fullPage: true});
+    });
+
     test('Nguồn dài (path + snippet) KHÔNG làm tràn ngang', async ({page}) => {
         const longSnippet =
             'Design patterns are essential in Java backend development to create scalable, maintainable, and efficient applications. ' +
@@ -283,6 +348,7 @@ test.describe('Panel Nguồn', () => {
         });
         await page.goto('/');
         await expect(page.locator('[aria-label="Nguồn tham khảo"]')).toBeVisible();
+        await expandSources(page);
 
         const report = await overflowReport(page);
         expect(report.overflow, JSON.stringify(report, null, 2)).toBeLessThanOrEqual(0);
@@ -314,6 +380,7 @@ test.describe('Panel Nguồn', () => {
         });
         await page.goto('/');
         await expect(page.locator('[aria-label="Nguồn tham khảo"]')).toBeVisible();
+        await expandSources(page);
 
         const report = await overflowReport(page);
         expect(report.overflow, JSON.stringify(report, null, 2)).toBeLessThanOrEqual(0);
