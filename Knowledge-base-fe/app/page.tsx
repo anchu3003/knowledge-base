@@ -29,14 +29,22 @@ import {
     postChat,
     streamChat,
 } from '@/lib/api';
+import {
+    MAX_TOKENS_MAX,
+    MAX_TOKENS_MIN,
+    getAnswerSettingsServerSnapshot,
+    getAnswerSettingsSnapshot,
+    hydrateAnswerSettings,
+    setAnswerSettings,
+    subscribeAnswerSettings,
+} from '@/lib/answer-settings';
+
 import {mergeServerConversations, sessionMessagesFromDetail} from '@/lib/conversations';
 import {describeApiError, type ApiErrorView} from '@/lib/errors';
 import {phaseOf} from '@/lib/stream-phase';
 import type {ChatMessage} from '@/lib/types';
 
-/** Default khớp BE (`max_tokens=1000`). */
-const DEFAULT_MAX_TOKENS = 1000;
-const DEFAULT_TEMPERATURE = 0.7;
+// KB-9.2: không hard-code default nữa — `null` = "theo server" (BE tự dùng DEFAULT_* trong env).
 
 const GREETING =
     'Chào bạn! Mình là trợ lý trên kho tài liệu cá nhân của bạn. Hỏi mình bất cứ điều gì về tài liệu đã nạp ' +
@@ -88,8 +96,12 @@ function ChatPageInner() {
     const conversationId = activeSession?.conversationId ?? null;
 
     const [input, setInput] = useState('');
-    const [maxTokens, setMaxTokens] = useState<number>(DEFAULT_MAX_TOKENS);
-    const [temperature, setTemperature] = useState<number>(DEFAULT_TEMPERATURE);
+    const answerSettings = useSyncExternalStore(
+        subscribeAnswerSettings,
+        getAnswerSettingsSnapshot,
+        getAnswerSettingsServerSnapshot,
+    );
+    const {maxTokens, temperature} = answerSettings;
     const [formError, setFormError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     // KB-4.11: pha truy hồi ↔ đang viết + đếm giây đã chờ
@@ -112,6 +124,14 @@ function ChatPageInner() {
     useEffect(() => {
         scrollRef.current?.scrollIntoView({behavior: 'smooth'});
     }, [messages]);
+
+    /**
+     * KB-9.2: nạp tuỳ chỉnh trả lời từ `localStorage` **sau mount** (không đọc trong render ⇒ SSR và
+     * lần render đầu dùng "theo server", không lệch hydration). Store tự emit ⇒ component re-render.
+     */
+    useEffect(() => {
+        hydrateAnswerSettings();
+    }, []);
 
     // ---- KB-5.2: lịch sử bền phía server (server = nguồn sự thật, `localStorage` = fallback) ----
     useEffect(() => {
@@ -220,15 +240,8 @@ function ChatPageInner() {
             return;
         }
 
-        if (!Number.isFinite(maxTokens) || maxTokens <= 0 || maxTokens > 2000) {
-            setFormError('Max tokens phải là số trong khoảng 1–2000.');
-            return;
-        }
-
-        if (temperature < 0 || temperature > 1) {
-            setFormError('Temperature phải trong khoảng 0–1.');
-            return;
-        }
+        // KB-9.2: `null` = theo server ⇒ không validate. Khi có giá trị thì store đã clamp theo
+        // `MAX_TOKENS_MIN/MAX` + `TEMPERATURE_MIN/MAX` (khớp ràng buộc `ChatRequest` của BE).
 
         const question = input.trim();
         setInput('');
@@ -271,8 +284,8 @@ function ChatPageInner() {
                 const data = await postChat({
                     message: question,
                     conversation_id: conversationId ?? undefined,
-                    max_tokens: maxTokens,
-                    temperature,
+                    max_tokens: maxTokens ?? undefined,
+                    temperature: temperature ?? undefined,
                 });
 
                 if (data.conversation_id) {
@@ -323,8 +336,8 @@ function ChatPageInner() {
                 {
                     message: question,
                     conversation_id: conversationId ?? undefined,
-                    max_tokens: maxTokens,
-                    temperature,
+                    max_tokens: maxTokens ?? undefined,
+                    temperature: temperature ?? undefined,
                 },
                 {
                     signal: controller.signal,
@@ -539,9 +552,13 @@ function ChatPageInner() {
                         streamingEnabled={STREAMING_ENABLED}
                         formError={formError}
                         maxTokens={maxTokens}
-                        onMaxTokensChange={setMaxTokens}
+                        onMaxTokensChange={(value) => setAnswerSettings({...answerSettings, maxTokens: value})}
                         temperature={temperature}
-                        onTemperatureChange={setTemperature}
+                        onTemperatureChange={(value) => setAnswerSettings({...answerSettings, temperature: value})}
+                        onUseServerDefaults={() => setAnswerSettings({maxTokens: null, temperature: null})}
+                        usingServerDefaults={maxTokens === null && temperature === null}
+                        maxTokensLimit={{min: MAX_TOKENS_MIN, max: MAX_TOKENS_MAX}}
+
                         model={typeof activeModel === 'string' ? activeModel : undefined}
                     />
                 </main>

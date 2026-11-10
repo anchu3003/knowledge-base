@@ -18,10 +18,16 @@ interface ChatComposerProps {
     /** `NEXT_PUBLIC_STREAMING` — false thì không có Stop (request blocking) */
     streamingEnabled: boolean;
     formError?: string | null;
-    maxTokens: number;
-    onMaxTokensChange: (value: number) => void;
-    temperature: number;
-    onTemperatureChange: (value: number) => void;
+    /** `null` = theo server (không gửi field ⇒ BE dùng env) — KB-9.2. */
+    maxTokens: number | null;
+    onMaxTokensChange: (value: number | null) => void;
+    temperature: number | null;
+    onTemperatureChange: (value: number | null) => void;
+    /** Trả cả 2 về "theo server". */
+    onUseServerDefaults: () => void;
+    /** Cả 2 đang là `null`. */
+    usingServerDefaults: boolean;
+    maxTokensLimit: {min: number; max: number};
     /** Model BE đang dùng — hiển thị read-only (BE chưa nhận model từ client; KB-4.9 sẽ bỏ hẳn select giả) */
     model?: string;
 }
@@ -44,6 +50,9 @@ export function ChatComposer({
                                  onMaxTokensChange,
                                  temperature,
                                  onTemperatureChange,
+                                 onUseServerDefaults,
+                                 usingServerDefaults,
+                                 maxTokensLimit,
                                  model,
                              }: ChatComposerProps) {
     const [showAdvanced, setShowAdvanced] = useState(false);
@@ -121,36 +130,59 @@ export function ChatComposer({
                 {showAdvanced && (
                     <div className="mt-2 grid grid-cols-1 gap-3 rounded-xl bg-muted/40 p-3 sm:grid-cols-2">
                         <div className="flex flex-col gap-1.5">
-                            <Label htmlFor="max-tokens" className="text-xs text-muted-foreground">
-                                Max tokens
-                            </Label>
+                            <div className="flex items-center justify-between gap-2">
+                                <Label htmlFor="max-tokens" className="text-xs text-muted-foreground">
+                                    Max tokens
+                                </Label>
+                                {usingServerDefaults && (
+                                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                        theo server
+                                    </span>
+                                )}
+                            </div>
                             <Input
                                 id="max-tokens"
                                 type="number"
-                                min={1}
-                                max={2000}
-                                value={maxTokens}
-                                onChange={(event) => onMaxTokensChange(Number(event.target.value))}
+                                min={maxTokensLimit.min}
+                                max={maxTokensLimit.max}
+                                placeholder={`auto (server)`}
+                                value={maxTokens ?? ''}
+                                onChange={(event) => {
+                                    const raw = event.target.value.trim();
+                                    // rỗng ⇒ quay về "theo server" (gửi undefined, BE dùng env)
+                                    onMaxTokensChange(raw === '' ? null : Number(raw));
+                                }}
                                 className="h-8"
                             />
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <Label htmlFor="temperature" className="text-xs text-muted-foreground">
-                                Temperature: {temperature.toFixed(2)}
+                                Temperature: {temperature === null ? 'auto (server)' : temperature.toFixed(2)}
                             </Label>
                             <Slider
                                 id="temperature"
                                 min={0}
                                 max={1}
                                 step={0.01}
-                                value={[temperature]}
+                                value={[temperature ?? 0.2]}
                                 onValueChange={([next]) => onTemperatureChange(next)}
                                 aria-label="Temperature"
                                 className="py-1.5"
                             />
                         </div>
+                        <div className="sm:col-span-2 flex items-center justify-between gap-2">
+                            <p className="text-[11px] text-muted-foreground">
+                                Để trống = dùng default của server (env <span className="font-mono">DEFAULT_*</span>).
+                                Thay đổi được lưu cho lần sau.
+                            </p>
+                            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11px]"
+                                    onClick={onUseServerDefaults} disabled={usingServerDefaults}>
+                                Dùng theo server
+                            </Button>
+                        </div>
                     </div>
                 )}
+
             </div>
         </div>
     );
