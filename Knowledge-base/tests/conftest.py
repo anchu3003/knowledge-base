@@ -154,6 +154,10 @@ class FakeDocumentService:
             "status": "healthy" if self.count else "empty",
         }
 
+    def filter_by_relevance(self, docs, threshold=None):
+        """KB-9.4: fake giữ nguyên nguồn (không lọc) — test ngưỡng nằm ở `tests/test_relevance_filter.py`."""
+        return list(docs), 0
+
     async def auto_load_documents(self):
         self.calls.append("auto_load_documents")
         if self.error is not None:

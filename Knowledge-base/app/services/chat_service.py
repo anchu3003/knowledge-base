@@ -190,6 +190,9 @@ class ChatService:
             used_query = message
             rewrite_attempts = 0
             similar_docs, multi_query_parts = await self._initial_retrieval(message)
+            # KB-9.4: bỏ nguồn dưới ngưỡng liên quan (score rerank). Nếu bỏ hết ⇒ context rỗng ⇒ prompt
+            # chuyển sang nhánh "không có trong knowledge base" và model trả lời bằng kiến thức chung.
+            similar_docs, dropped_sources = self.document_service.filter_by_relevance(similar_docs)
 
             # Optionally perform query rewriting if retrieval quality is poor
             if self.settings.enable_query_rewrite:
@@ -262,6 +265,8 @@ class ChatService:
                 "sources": sources,
                 "metadata": {
                     "retrieved_documents": len(similar_docs),
+                    "dropped_sources": dropped_sources,
+                    "relevance_min_score": float(getattr(self.settings, "relevance_min_score", 0.0) or 0.0),
                     "timestamp": datetime.now().isoformat(),
                     "model": self.settings.openai_model,
                     "temperature": temperature,
@@ -323,6 +328,9 @@ class ChatService:
             used_query = message
             rewrite_attempts = 0
             similar_docs, multi_query_parts = await self._initial_retrieval(message)
+            # KB-9.4: bỏ nguồn dưới ngưỡng liên quan (score rerank). Nếu bỏ hết ⇒ context rỗng ⇒ prompt
+            # chuyển sang nhánh "không có trong knowledge base" và model trả lời bằng kiến thức chung.
+            similar_docs, dropped_sources = self.document_service.filter_by_relevance(similar_docs)
 
             # Optional query rewrite if results are weak
             if self.settings.enable_query_rewrite:
@@ -381,6 +389,8 @@ class ChatService:
                 "conversation_id": conversation_id,
                 "metadata": {
                     "retrieved_documents": len(similar_docs),
+                    "dropped_sources": dropped_sources,
+                    "relevance_min_score": float(getattr(self.settings, "relevance_min_score", 0.0) or 0.0),
                     "timestamp": datetime.now().isoformat(),
                     "model": self.settings.openai_model,
                     "temperature": temperature,
@@ -421,6 +431,8 @@ class ChatService:
                 "sources": sources,
                 "metadata": {
                     "retrieved_documents": len(similar_docs),
+                    "dropped_sources": dropped_sources,
+                    "relevance_min_score": float(getattr(self.settings, "relevance_min_score", 0.0) or 0.0),
                     "timestamp": datetime.now().isoformat(),
                     "model": self.settings.openai_model,
                     "temperature": temperature,

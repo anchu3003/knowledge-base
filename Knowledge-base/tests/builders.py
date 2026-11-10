@@ -113,6 +113,10 @@ def _make_noop_document_service():
         async def search_similar_documents(self, query, k=None, rerank_top_n=None):
             return []
 
+        def filter_by_relevance(self, docs, threshold=None):
+            """KB-9.4: không lọc (test ngưỡng có file riêng)."""
+            return list(docs), 0
+
     return _NoopDocumentService()
 
 

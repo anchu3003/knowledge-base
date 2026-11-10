@@ -617,6 +617,48 @@ class DocumentService:
         # Prepare final results top-k
         return [{**hit, "rank": idx} for idx, hit in enumerate(candidates[:k], start=1)]
 
+    def filter_by_relevance(
+            self,
+            docs: List[Dict[str, Any]],
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """KB-9.4: bỏ nguồn có `score` dưới `RELEVANCE_MIN_SCORE`. Trả `(kept, dropped)`.
+
+        Vì sao lọc **sau** rerank: score rerank là xác suất `sigmoid` cho từng cặp (query, chunk) ⇒ có ý
+        nghĩa tuyệt đối, đặt ngưỡng được. Score hybrid đã **min-max theo tập ứng viên** (luôn có 1.0) nên
+        không dùng để đặt ngưỡng được (ADR-0005/0012).
+
+        Cảnh báo: `score == 0.0` cũng xảy ra khi **cross-encoder lỗi** (xem `_score_pairs`) — trong trường
+        hợp đó việc lọc sẽ bỏ hết nguồn; `chat_service` ghi `rerank_failed` để phân biệt khi debug.
+        """
+        threshold = float(getattr(self.settings, "relevance_min_score", 0.0) or 0.0)
+        if threshold <= 0:
+            return docs, 0
+        kept = [d for d in docs if float(d.get("score") or 0.0) >= threshold]
+        dropped = len(docs) - len(kept)
+        if dropped:
+            logger.info(
+                "relevance filter: dropped=%d kept=%d threshold=%.4f",
+                dropped, len(kept), threshold,
+            )
+        return kept, dropped
+
+    def refresh_config_fingerprint(self) -> None:
+        """KB-9.4: đổi tham số lúc chạy ⇒ tính lại fingerprint + xoá cache rerank.
+
+        Không làm bước này thì cache trả điểm theo **cấu hình cũ** (khoá cache có `config_fingerprint`) —
+        đúng lớp bug mà ADR-0012 đã cảnh báo.
+        """
+        self._config_fingerprint = (
+            f"h={int(self.settings.enable_hybrid)}:a={self.settings.hybrid_alpha}:"
+            f"d={int(self.settings.dedup_enabled)}:{self.settings.dedup_jaccard_threshold}:"
+            f"cap={self.settings.max_chunks_per_file}:m={self.settings.rerank_model}:"
+            f"thr={self.settings.similarity_threshold}:ck={self.settings.hybrid_candidate_k}:"
+            f"rel={getattr(self.settings, 'relevance_min_score', 0.0)}"
+        )
+        if self._rerank_cache is not None:
+            self._rerank_cache.clear()
+        logger.info("config fingerprint refreshed after runtime setting change")
+
     async def get_status(self) -> Dict[str, Any]:
         """Get the status of the document database"""
         try:

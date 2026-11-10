@@ -122,6 +122,11 @@ class Settings(BaseSettings):
     # Chốt **6** (#5): mọi metric chất lượng **bằng hoặc tốt hơn** cấu hình đang chạy (#2), p50 **−47%**.
     # #4 và #7 nhanh hơn nhưng mỗi phần chỉ chấm `top//2` ⇒ precision tụt >5% (đó là lý do phần nay chấm đủ top-N).
     rerank_top_n: int = Field(default=6, alias="RERANK_TOP_N")
+    # KB-9.4: ngưỡng điểm rerank — dưới ngưỡng thì **bỏ nguồn** (coi như không liên quan).
+    # Đo trên bộ vàng 28 câu (2026-11-10): câu ngoài phạm vi có score <= 0,0003; chunk đúng thấp nhất
+    # 0,0031 (p10 0,0278). Chọn 0,02 ⇒ giữ 20/23 nguồn đúng, bỏ ~80% nhiễu, diệt 100% câu ngoài phạm vi.
+    # 0 = tắt lọc. Đổi lúc chạy được qua `PUT /settings`.
+    relevance_min_score: float = Field(default=0.02, alias="RELEVANCE_MIN_SCORE")
     rerank_model: str = Field(default="BAAI/bge-reranker-v2-m3", alias="RERANK_MODEL")
 
     # Cache điểm rerank trong RAM (KB-5.3 — trả TD-15). Khoá = query + index_version + tham số ⇒

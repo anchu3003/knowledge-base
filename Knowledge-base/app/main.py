@@ -4,7 +4,7 @@ import time
 import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +32,7 @@ from app.core.errors import (
     http_status_error,
 )
 from app.core.logging_setup import configure_logging
+from app.core import runtime_settings
 from app.core.auth import ApiKeyMiddleware
 from app.core.rate_limit import RateLimitMiddleware, SlidingWindowLimiter
 from app.core.middleware import RequestIDMiddleware, get_request_id
@@ -657,7 +658,49 @@ async def delete_conversation(
         raise ConversationStoreError(f"delete_conversation: {type(e).__name__}: {e}") from e
 
 
+def _on_runtime_settings_change() -> None:
+    """Đổi tham số ảnh hưởng retrieval ⇒ tính lại fingerprint + xoá cache rerank (ADR-0012)."""
+    if document_service is not None:
+        document_service.refresh_config_fingerprint()
+
+
+@app.get("/settings")
+async def get_settings_endpoint():
+    """Tham số chỉnh được **lúc chạy** (KB-9.4) + giá trị mặc định của server.
+
+    UI dựng control từ `tunables`; `values` là giá trị đang có hiệu lực, `defaults` là giá trị env lúc
+    khởi động, `overridden` cho biết tham số nào người dùng đã đổi.
+    """
+    return JSONResponse(content=runtime_settings.describe(get_settings()))
+
+
+@app.put("/settings")
+async def update_settings_endpoint(payload: Dict[str, Any]):
+    """Áp một phần tham số (partial update). Trả về giá trị sau khi áp.
+
+    Chỉ nhận whitelist trong `app/core/runtime_settings.py`; tham số cần re-index (chunk size, embedding
+    model…) **không** đổi được ở đây. Giá trị ngoài `min/max` ⇒ 422 theo envelope lỗi KB-3.1.
+    """
+    try:
+        values = runtime_settings.apply_updates(
+            get_settings(), payload, on_retrieval_change=_on_runtime_settings_change,
+        )
+    except ValueError as exc:
+        raise AppError(str(exc), code="invalid_setting", http_status=422,
+                       message="Cấu hình không hợp lệ.") from exc
+    return JSONResponse(content={"values": values,
+                                 "overridden": sorted(runtime_settings._overrides)})
+
+
+@app.post("/settings/reset")
+async def reset_settings_endpoint():
+    """Trả mọi tham số về default của server (env)."""
+    values = runtime_settings.reset(get_settings(), on_retrieval_change=_on_runtime_settings_change)
+    return JSONResponse(content={"values": values, "overridden": []})
+
+
 @app.get("/documents/status")
+
 async def get_document_status(
         service: DocumentService = Depends(get_document_service)
 ):
