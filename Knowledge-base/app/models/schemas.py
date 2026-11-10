@@ -107,11 +107,21 @@ class ConversationDetail(BaseModel):
 # Chat
 # ------------------------------
 class ChatRequest(BaseModel):
-    """Request model for chat"""
+    """Request model for chat.
+
+    KB-9.1: `max_tokens`/`temperature` mặc định **None** (không hard-code 1000/0.7 ở đây).
+    Trước đây default nằm ở schema ⇒ Pydantic luôn điền 1000/0.7 khi client không gửi ⇒ service thấy
+    "có giá trị" và **bỏ qua** `DEFAULT_MAX_TOKENS`/`DEFAULT_TEMPERATURE` trong env (2 biến đó thành chết).
+    """
     message: str = Field(..., description="The user's message")
     conversation_id: Optional[str] = Field(None, description="Optional conversation ID for context")
-    max_tokens: Optional[int] = Field(1000, description="Maximum tokens in response")
-    temperature: Optional[float] = Field(0.7, description="Temperature for response generation")
+    max_tokens: Optional[int] = Field(
+        None, ge=64, le=8000, description="Maximum tokens in response (mặc định: DEFAULT_MAX_TOKENS)",
+    )
+    temperature: Optional[float] = Field(
+        None, ge=0.0, le=2.0, description="Temperature for response generation (mặc định: DEFAULT_TEMPERATURE)",
+    )
+
 
 
 class ChatResponse(BaseModel):
