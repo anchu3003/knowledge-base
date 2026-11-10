@@ -1,6 +1,6 @@
 'use client';
 
-import {useState} from 'react';
+import {useState, type ReactNode} from 'react';
 import {ArrowUp, ChevronDown, Settings2, Square} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
@@ -30,6 +30,8 @@ interface ChatComposerProps {
     maxTokensLimit: {min: number; max: number};
     /** Model BE đang dùng — hiển thị read-only (BE chưa nhận model từ client; KB-4.9 sẽ bỏ hẳn select giả) */
     model?: string;
+    /** KB-9.6: cấu hình **hệ thống** (12 tham số server) — render ngay trong panel Tuỳ chọn. */
+    systemSettings?: ReactNode;
 }
 
 /**
@@ -54,6 +56,7 @@ export function ChatComposer({
                                  usingServerDefaults,
                                  maxTokensLimit,
                                  model,
+                                 systemSettings,
                              }: ChatComposerProps) {
     const [showAdvanced, setShowAdvanced] = useState(false);
     const canSend = value.trim().length > 0 && !isLoading;
@@ -170,6 +173,11 @@ export function ChatComposer({
                                 className="py-1.5"
                             />
                         </div>
+                        {systemSettings && (
+                            <div className="sm:col-span-2 border-t border-border/60 pt-2">
+                                {systemSettings}
+                            </div>
+                        )}
                         <div className="sm:col-span-2 flex items-center justify-between gap-2">
                             <p className="text-[11px] text-muted-foreground">
                                 Để trống = dùng default của server (env <span className="font-mono">DEFAULT_*</span>).

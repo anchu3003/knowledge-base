@@ -138,7 +138,7 @@ export function SettingsPanel({onError}: SettingsPanelProps) {
                 </span>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="max-h-60 space-y-1.5 overflow-y-auto pr-1">
                 {data.tunables.map((tunable) => (
                     <div key={tunable.key} className="flex min-w-0 items-center justify-between gap-2">
                         <Label htmlFor={`setting-${tunable.key}`}
