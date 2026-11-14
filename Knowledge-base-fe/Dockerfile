@@ -1,0 +1,63 @@
+## Multi-stage Dockerfile for Next.js (production)
+## Build with: docker build -t knowledge-base-fe .
+## Run with:   docker run -p 3000:3000 --env-file .env knowledge-base-fe
+
+# 1) Base image for all stages (Debian-based to avoid musl native module issues)
+FROM node:20-slim AS base
+WORKDIR /app
+# Install minimal required system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# 2) Install dependencies for building (full deps incl. dev)
+FROM base AS deps
+COPY package.json package-lock.json ./
+# Use npm ci for reproducible installs
+RUN npm ci
+
+# 3) Build the Next.js app
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# KB-4.7: `NEXT_PUBLIC_*` được NHÚNG vào bundle lúc build ⇒ phải truyền bằng `--build-arg`
+# (truyền `-e` lúc `docker run` là vô nghĩa). Mặc định = BE trên máy host (browser gọi trực tiếp).
+ARG NEXT_PUBLIC_API_PROXY_URL=http://localhost:8000
+ARG NEXT_PUBLIC_STREAMING=true
+ENV NEXT_PUBLIC_API_PROXY_URL=$NEXT_PUBLIC_API_PROXY_URL
+ENV NEXT_PUBLIC_STREAMING=$NEXT_PUBLIC_STREAMING
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the app
+RUN npm run build
+
+# 4) Prepare production-only node_modules (smaller image)
+FROM base AS prod-deps
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# 5) Runtime image
+FROM base AS runner
+WORKDIR /app
+
+# Non-root user for security (already exists in node image)
+USER node
+
+# Copy production node_modules and built assets
+COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
+COPY --chown=node:node --from=builder /app/.next ./.next
+COPY --chown=node:node package.json ./package.json
+COPY --chown=node:node next.config.mjs ./next.config.mjs
+
+# Set the port Next.js listens on
+EXPOSE 3000
+
+# KB-4.7: healthcheck — `node:20-slim` KHÔNG có `curl` ⇒ dùng `node` (có `fetch` từ Node 18).
+# `/` là trang tĩnh (○ Static) nên 200 là đủ chứng minh server phục vụ được.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+# Start Next.js in production mode (bind 0.0.0.0 để container expose ra ngoài)
+CMD ["node_modules/.bin/next", "start", "-p", "3000", "-H", "0.0.0.0"]

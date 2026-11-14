@@ -1,0 +1,14 @@
+# Chuẩn hoá line endings cho repo dev trên Linux (WSL2) — KB-7.1
+# Tránh churn CRLF khi file đi qua Windows (VS Code, copy từ /mnt/c).
+* text=auto eol=lf
+
+# Binary — không normalize
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
