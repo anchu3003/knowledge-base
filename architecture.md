@@ -49,19 +49,19 @@ Vector store: ChromaDB (local, ./chroma_db)
 
 ---
 
-## 3. Ba repo (2 app repo + root docs repo)
+## 3. Một repo — ba phần (BE, FE, docs/AI assets)
 
-| | Backend | Frontend | Root (docs/AI assets) |
+| | Backend | Frontend | Docs/AI assets |
 |---|---|---|---|
-| Thư mục | `Knowledge-base/` | `Knowledge-base-fe/` | `./` (chính workspace) |
+| Thư mục | `Knowledge-base/` | `Knowledge-base-fe/` | `./` (gốc repo) |
 | Stack | Python 3.13 · FastAPI · LangChain · ChromaDB | Next.js 16 · React 19 · TS · Tailwind v4 · shadcn | Markdown + Python tools |
 | Port dev | `8000` | `3000` | — |
-| Remote | `gitlab.com:anchu3003/knowledge-base-be` | `gitlab.com:anchu3003/knowlege-base-fe` | local `main` (chưa có remote) |
+| Remote | chung `origin` (GitHub `anchu3003/knowledge-base`) | chung `origin` | chung `origin` |
 | Nội dung | `app/`, `tests/`, `eval/`, Dockerfile | `app/`, `components/`, `lib/`, `tests/`, `e2e/` | `AGENTS.md`, `architecture.md`, `Backlog.md`, `README.md`, `docs/`, `tools/`, `.cline*` |
 | Điểm vào | `app/main.py` | `app/page.tsx` | `README.md` |
 
-Root repo **ignore** 2 folder repo con (`.gitignore`: `Knowledge-base/`, `Knowledge-base-fe/`) ⇒ không file
-nào bị track 2 lần; mọi thay đổi code vẫn commit ở repo tương ứng.
+**1 git repo duy nhất** — mọi thứ chung một lịch sử, **1** `.gitignore` + **1** `.gitattributes` ở gốc.
+`Interview/` (kho tài liệu cá nhân) bị ignore; CI là GitHub Actions (`.github/workflows/tests.yml`).
 
 
 ### 3.1 Môi trường dev — WSL2 (KB-7.1)
@@ -69,11 +69,11 @@ nào bị track 2 lần; mọi thay đổi code vẫn commit ở repo tương �
 | Hạng mục | Giá trị |
 |---|---|
 | OS dev | **WSL2 Ubuntu 26.04** (kernel `6.18.x-microsoft-standard-WSL2`), `/etc/wsl.conf` bật `systemd=true` |
-| Vị trí code | `/home/anchu/projects/kb-khoa-hoc` — **Linux FS**, không dùng `/mnt/*` (I/O chậm với `node_modules`/torch) |
+| Vị trí code | `/home/anchu/mygit/personal-side-projects/knowledge-base` — **Linux FS**, không dùng `/mnt/*` (I/O chậm với `node_modules`/torch) |
 | Python | **3.13.18** qua `uv` (venv `Knowledge-base/.venv`) |
 | Node | **26.13.0** LTS qua `fnm` (npm 11.20) |
 | Docker | `docker build` chạy được (engine 29.9.2); image BE **2,68 GB** (KB-5.10: torch CPU + bind-mount `/wheels`), FE 1,1 GB — chưa có registry/CI: **TD-24** |
-| GitLab CLI | `glab 1.128.0` (auth bằng PAT scope `api`) |
+| GitHub CLI | `gh` (auth bằng `gh auth login`, scope `repo` + `workflow`) |
 | Editor | VS Code + **Remote-WSL** |
 
 Windows chỉ còn VS Code/Remote-WSL. Chi tiết lệnh: `AGENTS.md` §6.
@@ -289,18 +289,16 @@ GET /ready?deep=true ──► + provider probe: 1 request `max_tokens=1` (tốn
 
 ---
 
-## 4b. CI (KB-5.7) — có sẵn nhưng **TẮT mặc định**
+## 4b. CI — GitHub Actions (`.github/workflows/tests.yml`)
 
-| Repo | File | Job | Ghi chú |
-|---|---|---|---|
-| `Knowledge-base` | `.gitlab-ci.yml` | `pytest` | `python:3.13-slim` · cài **torch CPU** trước (như `Dockerfile`, KB-5.10) · cache pip · artifact `junit` |
-| `Knowledge-base-fe` | `.gitlab-ci.yml` | `lint-typecheck-test` · `build` · `e2e` | `node:22` · e2e dùng image `mcr.microsoft.com/playwright:v1.65.0-jammy` · `next start` + `APP_URL` (không dùng `next dev`) |
+| Job | Chạy gì | Ghi chú |
+|---|---|---|
+| `backend (pytest)` | `python -m pytest -q` trong `Knowledge-base/` | Python 3.13 · cài **torch CPU** trước (KB-5.10) · fake provider nên **không cần** key · tạo corpus placeholder `Interview/placeholder.md` |
+| `frontend (vitest + typecheck + lint)` | `npm run test` · `npm run typecheck` · `npm run lint` trong `Knowledge-base-fe/` | Node 22 · cache npm theo `package-lock.json` |
 
-- **Cờ**: `workflow.rules` chỉ cho pipeline chạy khi biến CI/CD **`CI_ENABLED=true`**; chưa đặt ⇒ `when: never`
-  ⇒ **không tạo pipeline** (merge condition vẫn như cũ: ticket Done + MR có summary + không conflict).
-  Bật: Settings → CI/CD → Variables → thêm `CI_ENABLED=true` (không cần Protected/Masked).
-- e2e trong CI **không cần** BE/LLM/quota: toàn bộ test stub route (`/chat/stream`, `/conversations`, `/documents/*`).
-- **Chưa có**: build/push **registry**, deploy, bake model (TD-24). Thời gian pipeline thật chưa đo (chưa bật cờ).
+- Chạy mỗi **push / PR vào `main`**; `concurrency` huỷ run cũ trên cùng ref.
+- **Chưa có** trong CI: `npm run build`, Playwright e2e, build/push **registry**, deploy, bake model (TD-24).
+- e2e chạy local **không cần** BE/LLM/quota: toàn bộ test stub route (`/chat/stream`, `/conversations`, `/documents/*`).
 
 ---
 

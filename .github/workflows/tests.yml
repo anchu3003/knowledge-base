@@ -1,7 +1,8 @@
 name: tests
 
-# Chạy cho cả 3 thư mục của monorepo. Test BE dùng fake provider
-# (xem Knowledge-base/tests/conftest.py) nên KHÔNG cần API key và không gọi mạng.
+# CI duy nhất của monorepo: backend (pytest) + frontend (vitest/typecheck/lint).
+# Test BE dùng fake provider (xem Knowledge-base/tests/conftest.py) nên KHÔNG cần
+# API key và không gọi mạng.
 on:
   push:
     branches: [main]

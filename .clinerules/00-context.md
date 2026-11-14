@@ -14,16 +14,15 @@ Không tạo `memory-bank/` riêng. `architecture.md` + `Backlog.md` đóng vai 
 
 ## Bản đồ repo
 
-| Thư mục | Vai trò | Stack | Git remote |
-|---|---|---|---|
-| `Knowledge-base/` | Backend API (RAG) | Python 3.13 · FastAPI · LangChain · ChromaDB | `gitlab.com:anchu3003/knowledge-base-be` |
-| `Knowledge-base-fe/` | Frontend UI | Next.js 16 · React 19 · Tailwind v4 · Radix/shadcn | `gitlab.com:anchu3003/knowlege-base-fe` |
-| `./` (root) | Tài liệu + AI assets + `tools/` | Markdown, Python tool nhỏ | local `main` (chưa có remote) |
+| Thư mục | Vai trò | Stack |
+|---|---|---|
+| `Knowledge-base/` | Backend API (RAG) | Python 3.13 · FastAPI · LangChain · ChromaDB |
+| `Knowledge-base-fe/` | Frontend UI | Next.js 16 · React 19 · Tailwind v4 · Radix/shadcn |
+| `./` (gốc) | Tài liệu + AI assets + `tools/` | Markdown, Python tool nhỏ |
 
-
-> 2 thư mục là **2 git repo riêng** (GitLab). Root `knowledge-base` **cũng là 1 git repo riêng** (từ
-> 2026-11-10) — track tài liệu/AI assets/tools ở root, **ignore** 2 folder repo con (`.gitignore`), nên không
-> file nào bị track 2 lần.
+> **1 git repo duy nhất** (`origin` → GitHub `anchu3003/knowledge-base`): BE, FE và tài liệu chung một
+> lịch sử — không còn 3 repo GitLab, không còn `sync.sh`. Gốc repo có **1** `.gitignore` + **1**
+> `.gitattributes`; `Interview/` (tài liệu cá nhân) **luôn** bị ignore.
 
 ## Nhắc nhanh (chi tiết xem `AGENTS.md`)
 

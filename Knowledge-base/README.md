@@ -3,8 +3,8 @@
 FastAPI + LangChain + ChromaDB + Qwen3-Embedding + rerank cross-encoder local, sinh câu trả lời bằng
 **Groq** (OpenAI-compatible). Đây là **backend**; UI ở repo [`Knowledge-base-fe`](../Knowledge-base-fe/README.md),
 tổng quan hệ thống ở [`../README.md`](../README.md).
-> Link dạng `../` (`../docs/adr/`, `../Knowledge-base/`, `../README.md`) chỉ mở được khi workspace có đủ
-> root + 2 repo cạnh nhau (đúng cách repo này được dùng); trên GitLab chúng sẽ 404.
+> Link dạng `../` (`../docs/adr/`, `../Knowledge-base/`, `../README.md`) dùng được cả local lẫn trên
+> GitHub vì BE/FE/docs nằm trong **cùng một repo** (monorepo).
 
 
 > Số liệu trong file này **tính đến 2026-11-10**: **320 test** · **601 chunk / 56 file** · image Docker

@@ -3,13 +3,13 @@
 [![tests](https://github.com/anchu3003/knowledge-base/actions/workflows/tests.yml/badge.svg)](https://github.com/anchu3003/knowledge-base/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **Public showcase repo.** Đây là bản gộp **read-only** của 3 repo GitLab (`knowledge-base-be`,
-> `knowlege-base-fe`, `knowledge-base-root`) để có một link duy nhất cho portfolio. Code được phát
-> triển trên GitLab; bản này đồng bộ bằng [`sync.sh`](sync.sh) và **không nhận pull request**.
+> **Một repo duy nhất (monorepo).** Backend ở [`Knowledge-base/`](Knowledge-base/), frontend ở
+> [`Knowledge-base-fe/`](Knowledge-base-fe/), tài liệu/ADR/backlog/AI assets ngay ở gốc repo. Tất cả
+> nằm trong **cùng một lịch sử git** — 1 `.gitignore`, 1 `.gitattributes`, 1 CI.
 >
-> **Không có dữ liệu cá nhân.** Kho tài liệu cá nhân (`Interview/`) đã bị loại khỏi **toàn bộ lịch sử**
-> của repo này. Muốn chạy thử: tạo `Knowledge-base/Interview/` rồi thả file `.md` của bạn vào đó
-> (thư mục này nằm trong `.gitignore`, nên tài liệu của bạn sẽ không bị commit).
+> **Không có dữ liệu cá nhân trong repo.** Kho tài liệu cá nhân nằm ở `Interview/` và **không bao giờ
+> commit** (xem [`.gitignore`](.gitignore)). Muốn chạy thử: tạo `Knowledge-base/Interview/` rồi thả
+> file `.md` của bạn vào đó — pattern `Interview/` khớp ở mọi cấp nên tài liệu sẽ không bị commit.
 >
 > **English summary.** A RAG assistant over my own technical notes: FastAPI + ChromaDB with hybrid
 > retrieval (dense Qwen3-Embedding 0.6B + BM25, fused and deduplicated), cross-encoder reranking to
@@ -24,19 +24,19 @@ quyết định kiến trúc đều có ADR kèm **số đo thật**.
 
 Điểm đáng chú ý (portfolio): **2.879 chunk / 234 file**, retrieval `hit@k 0,964` / `MRR 0,833` trên bộ vàng
 **28 câu** (41 lần chạy eval có snapshot), p50 **3,2 s**/câu trên CPU, **300+ unit test** + **132 FE test** +
-**16 e2e**, image BE **2,68 GB** (từ 16,5 GB), CI có sẵn nhưng **gate tắt mặc định**. Số liệu **tính đến
+**16 e2e**, image BE **2,68 GB** (từ 16,5 GB), CI GitHub Actions chạy thật mỗi push/PR. Số liệu **tính đến
 2026-11-10** — chi tiết từng lần chạy ở [`Knowledge-base/eval/runs/`](Knowledge-base/eval/runs/).
 
 ![Trang chat — light](Knowledge-base-fe/docs/images/home-light.png)
 ![Trang chat — dark](Knowledge-base-fe/docs/images/home-dark.png)
 
 > Chỉ muốn **chạy thử** ⇒ đọc [Quickstart](#quickstart). Muốn hiểu **vì sao** hệ thống như hiện tại ⇒
-> [`docs/adr/README.md`](root/docs/adr/README.md) (17 ADR + 3 lộ trình đọc + 28 câu ôn tập).
+> [`docs/adr/README.md`](docs/adr/README.md) (17 ADR + 3 lộ trình đọc + 28 câu ôn tập).
 
 ## Hệ thống gồm gì
 
-Hai repo độc lập trên GitLab (ở đây là 2 thư mục), cộng tài liệu/AI assets ở `root/`:
-`Knowledge-base/` (backend), `Knowledge-base-fe/` (frontend), `root/` (architecture, ADR, backlog).
+Một repo, ba phần: `Knowledge-base/` (backend), `Knowledge-base-fe/` (frontend), và tài liệu/AI assets
+ngay ở gốc (`architecture.md`, `Backlog.md`, `docs/`, `tools/`).
 
 ```
 Browser
@@ -95,7 +95,7 @@ npm ci && npm run dev           # http://localhost:3000
 ## Cấu trúc source
 
 ```
-knowledge-base/                  # root: git repo riêng — track tài liệu + AI assets (ignore 2 repo con)
+knowledge-base/                  # 1 repo duy nhất — track cả BE, FE và tài liệu
 ├── README.md                    # file này — cửa vào chung
 ├── architecture.md              # hiện trạng kiến trúc (luồng dữ liệu, env, roadmap)
 ├── Backlog.md                   # ticket theo phase + tech debt (§7) + changelog
@@ -105,8 +105,9 @@ knowledge-base/                  # root: git repo riêng — track tài liệu +
 │   └── phases/                  # nhật ký từng phase (có gì · cách chạy · bài học)
 ├── .clinerules/ .cline/         # rules/skills/workflows cho AI agent
 ├── tools/                       # pii_scan.py, verify.sh, setup-wsl-docker-engine.sh
+├── .github/workflows/tests.yml  # CI: pytest + vitest/typecheck/lint
 │
-├── Knowledge-base/              # BE — git repo riêng (GitLab)
+├── Knowledge-base/              # BE (FastAPI · ChromaDB · LangChain)
 │   ├── app/main.py              # routes + middleware + error handlers
 │   ├── app/core/                # config, errors, auth, rate_limit, sse, provider_retry
 │   ├── app/services/            # document_service (index/retrieval/rerank), chat_service,
@@ -116,13 +117,15 @@ knowledge-base/                  # root: git repo riêng — track tài liệu +
 │   ├── eval/                    # bộ vàng 28 câu + runs/*.json (số đo)
 │   └── Dockerfile · docker-compose.yml
 │
-└── Knowledge-base-fe/           # FE — git repo riêng (GitLab)
-    ├── app/                     # App Router (page.tsx = màn chat)
-    ├── components/              # header/sidebar/composer/messages/documents-panel/ui
-    ├── lib/                     # api.ts, chat-store.ts (state), sse.ts, types.ts
-    ├── tests/                   # 132 vitest
-    ├── e2e/ui.spec.ts           # 16 Playwright checks
-    └── docs/images/             # ảnh chụp dùng trong README
+├── Knowledge-base-fe/           # FE (Next.js 16 · React 19 · Tailwind v4)
+│   ├── app/                     # App Router (page.tsx = màn chat)
+│   ├── components/              # header/sidebar/composer/messages/documents-panel/ui
+│   ├── lib/                     # api.ts, chat-store.ts (state), sse.ts, types.ts
+│   ├── tests/                   # 132 vitest
+│   ├── e2e/ui.spec.ts           # 16 Playwright checks
+│   └── docs/images/             # ảnh chụp dùng trong README
+│
+└── Interview/                   # (tự tạo) kho tài liệu cá nhân — KHÔNG commit (`.gitignore`)
 ```
 
 ## Luồng dữ liệu end-to-end
@@ -149,29 +152,25 @@ Số đo để bạn biết "nhanh hay chậm": sync **~1,2 s/file** (không đ�
 | Muốn biết | Đọc |
 |---|---|
 | Chạy thế nào, endpoint nào, env nào | [`Knowledge-base/README.md`](Knowledge-base/README.md) · [`Knowledge-base-fe/README.md`](Knowledge-base-fe/README.md) |
-| Hệ thống hiện tại gồm gì (luồng, layer, env, roadmap) | [`architecture.md`](root/architecture.md) |
-| **Vì sao** lại chọn thế (kèm số đo + anti-pattern) | [`docs/adr/README.md`](root/docs/adr/README.md) |
-| Đang làm gì, nợ kỹ thuật, lịch sử thay đổi | [`Backlog.md`](root/Backlog.md) |
-| Nhật ký từng phase (có gì, cách chạy lúc đó, bài học) | [`docs/phases/`](root/docs/phases/) |
-| Cách làm việc với AI agent trong repo | [`AGENTS.md`](root/AGENTS.md) |
+| Hệ thống hiện tại gồm gì (luồng, layer, env, roadmap) | [`architecture.md`](architecture.md) |
+| **Vì sao** lại chọn thế (kèm số đo + anti-pattern) | [`docs/adr/README.md`](docs/adr/README.md) |
+| Đang làm gì, nợ kỹ thuật, lịch sử thay đổi | [`Backlog.md`](Backlog.md) |
+| Nhật ký từng phase (có gì, cách chạy lúc đó, bài học) | [`docs/phases/`](docs/phases/) |
+| Cách làm việc với AI agent trong repo | [`AGENTS.md`](AGENTS.md) |
 
 ## Repo & git
 
-| Repo | Nội dung | Remote |
-|---|---|---|
-| `Knowledge-base/` | backend | GitLab `knowledge-base-be` |
-| `Knowledge-base-fe/` | frontend | GitLab `knowlege-base-fe` |
-| root (thư mục này) | tài liệu, ADR, AI assets, `tools/` | local `main` (chưa có remote) |
+**Một repo duy nhất**, `origin` → GitHub. Không còn 3 repo GitLab, không còn `sync.sh`.
 
-Root là git repo riêng và **ignore 2 folder repo con** (`.gitignore`) ⇒ không file nào bị track 2 lần.
-Commit tài liệu root độc lập với 2 repo app:
+- **1** `.gitignore` + **1** `.gitattributes` ở gốc — không có file riêng trong `Knowledge-base*/`.
+- **1** CI: [`.github/workflows/tests.yml`](.github/workflows/tests.yml) (pytest + vitest/typecheck/lint).
+- Nhánh ngắn hạn → PR → squash merge vào `main` (chi tiết: `AGENTS.md` §6,
+  [`.clinerules/10-git-workflow.md`](.clinerules/10-git-workflow.md)).
 
 ```bash
-git -C . status            # root repo
-git -C Knowledge-base status        # BE repo
-git -C Knowledge-base-fe status     # FE repo
+git status                 # BE + FE + docs: cùng 1 repo
+git switch -c feat/kb-x.y-slug
 ```
-
 
 ## Điểm kỹ thuật đáng chú ý
 
@@ -184,7 +183,7 @@ git -C Knowledge-base-fe status     # FE repo
 | Vận hành | `/health` (liveness) + `/ready` (3 check rẻ, `?deep=true` ping provider) + sync **chạy nền** | `/health` 200 sau **5,6 s** khi index nền (601 chunk) |
 | Chi phí | LLM free tier, embedding/rerank local ⇒ **0 đồng/tháng** | 1 cổng provider + retry có ngân sách, không vượt TPM |
 | Chất lượng code | 300+ test BE · 132 test FE · 16 e2e · 17 ADR có số đo | `pytest -q` · `npm run test` · `npx playwright test --list` |
-| CI | 2 repo có `.gitlab-ci.yml`, **gate `CI_ENABLED` mặc định TẮT** | không tạo pipeline trừ khi bật biến |
+| CI | GitHub Actions: pytest cho BE + vitest/typecheck/lint cho FE, chạy mỗi push/PR | [`.github/workflows/tests.yml`](.github/workflows/tests.yml) |
 
 Ảnh giao diện: [kho tài liệu + readiness](Knowledge-base-fe/docs/images/readiness-checks.png) ·
 [panel nguồn](Knowledge-base-fe/docs/images/sources-panel.png) ·

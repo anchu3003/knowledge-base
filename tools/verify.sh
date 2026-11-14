@@ -10,14 +10,15 @@ BE="$ROOT/Knowledge-base"
 FE="$ROOT/Knowledge-base-fe"
 PY_SYS="$(command -v python3 || command -v python)"
 
-echo "== [1] PII scan (file git-tracked của 2 repo) =="
+echo "== [1] PII scan (file git-tracked của repo) =="
 # Chỉ quét file TRACKED (đúng phạm vi có thể commit) → không đọc .env / artifact local.
-for repo in "$BE" "$FE"; do
-  if [ -d "$repo/.git" ]; then
-    echo "-- $(basename "$repo")"
-    ( cd "$repo" && git ls-files -z | xargs -0 -r "$PY_SYS" "$ROOT/tools/pii_scan.py" ) || true
-  fi
-done
+# Monorepo 1 repo: lấy danh sách từ git ở gốc, giới hạn trong 2 thư mục app.
+if git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  ( cd "$ROOT" && git ls-files -z -- Knowledge-base Knowledge-base-fe \
+      | xargs -0 -r "$PY_SYS" tools/pii_scan.py ) || true
+else
+  echo "skip: $ROOT không phải git repo"
+fi
 
 echo
 echo "== [2] BE: unit test =="

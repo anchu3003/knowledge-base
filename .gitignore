@@ -1,21 +1,96 @@
-# Mỗi thư mục con (Knowledge-base/, Knowledge-base-fe/, root/) đã có .gitignore
-# riêng của repo gốc — file này chỉ dọn rác ở tầng monorepo.
+# ==========================================================
+# 1 repo duy nhất (monorepo): BE `Knowledge-base/` + FE `Knowledge-base-fe/`
+# Chỉ có MỘT file ignore ở gốc — không còn .gitignore riêng trong từng thư mục.
+# ==========================================================
 
-# OS / editor
-.DS_Store
-Thumbs.db
-desktop.ini
-*.swp
-.idea/
-.vscode/
+# ---------- Kho tài liệu cá nhân (thêm sau) ----------
+# Không có "/" ở đầu ⇒ khớp ở mọi cấp: `Interview/` và `Knowledge-base/Interview/`
+# đều bị ignore. Thả file .md vào đó mà không sợ lỡ commit.
+Interview/
 
-# Log
-*.log
-
-# Không bao giờ commit secret (rule 30-pii-safety của project)
+# ---------- Secret / cấu hình máy (rule 30-pii-safety) ----------
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 secrets/
+
+# ---------- OS / editor ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ---------- Log ----------
+*.log
+Knowledge-base/logs/
+
+# ---------- Python / backend ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+.venv/
+venv/
+ENV/
+Knowledge-base/env/
+Knowledge-base/env.bak/
+Knowledge-base/venv.bak/
+Knowledge-base/develop-eggs/
+Knowledge-base/downloads/
+Knowledge-base/eggs/
+Knowledge-base/build/
+Knowledge-base/dist/
+Knowledge-base/lib/
+Knowledge-base/lib64/
+Knowledge-base/parts/
+Knowledge-base/sdist/
+Knowledge-base/var/
+Knowledge-base/wheels/
+Knowledge-base/.installed.cfg
+Knowledge-base/.pytest_cache/
+Knowledge-base/.mypy_cache/
+Knowledge-base/.coverage
+Knowledge-base/htmlcov/
+
+# Dữ liệu cá nhân / index — không commit
+Knowledge-base/data/
+Knowledge-base/chroma_db/
+Knowledge-base/app/chroma_db/
+
+# Docker local
+Knowledge-base/.docker/
+Knowledge-base/docker-compose.override.yml
+
+# ---------- Node / frontend ----------
+# `lib/` của FE là source thật ⇒ KHÔNG ignore toàn cục, chỉ ignore lib/ build của Python.
+node_modules/
+.next/
+out/
+Knowledge-base-fe/build/
+Knowledge-base-fe/.vercel/
+Knowledge-base-fe/*.tsbuildinfo
+Knowledge-base-fe/next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Playwright (KB-4.9)
+Knowledge-base-fe/test-results/
+Knowledge-base-fe/playwright-report/
+Knowledge-base-fe/blob-report/
+Knowledge-base-fe/.playwright/
+
+# ---------- Rác ----------
+*.bak
+*.tmp
+*.temp
+Todo.txt

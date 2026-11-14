@@ -69,6 +69,12 @@ def iter_files(targets: list[str]) -> list[Path]:
     for t in targets:
         p = Path(t)
         if p.is_file():
+            # Áp cùng bộ lọc cho file truyền trực tiếp (vd `git ls-files | xargs pii_scan.py`):
+            # không quét `tests/` (dữ liệu giả theo quy ước) hay file nhị phân.
+            if any(part in SKIP_DIRS for part in p.parts):
+                continue
+            if p.suffix.lower() in SKIP_EXTS:
+                continue
             files.append(p)
         elif p.is_dir():
             for f in p.rglob("*"):

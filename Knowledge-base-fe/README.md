@@ -4,8 +4,8 @@ UI cho backend RAG ở [`../Knowledge-base/`](../Knowledge-base/README.md) (Fast
 Tổng quan hệ thống: [`../README.md`](../README.md). Quyết định kiến trúc FE:
 [ADR-0015](../docs/adr/0015-fe-state-khong-dung-thu-vien.md) ·
 [ADR-0016](../docs/adr/0016-render-streaming-plain-text.md).
-> Link dạng `../` (`../docs/adr/`, `../Knowledge-base/`, `../README.md`) chỉ mở được khi workspace có đủ
-> root + 2 repo cạnh nhau (đúng cách repo này được dùng); trên GitLab chúng sẽ 404.
+> Link dạng `../` (`../docs/adr/`, `../Knowledge-base/`, `../README.md`) dùng được cả local lẫn trên
+> GitHub vì BE/FE/docs nằm trong **cùng một repo** (monorepo).
 
 
 > Số liệu **tính đến 2026-11-10**: **132 unit test** (vitest) · **16 e2e** (Playwright) · Next **16** ·

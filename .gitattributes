@@ -1,5 +1,5 @@
-# Chuẩn hoá line endings cho repo dev trên Linux (WSL2) — KB-7.1
-# Tránh churn CRLF khi file đi qua Windows (VS Code, copy từ /mnt/c).
+# Chuẩn hoá EOL cho toàn monorepo: mọi file text = LF.
+# (Dev trên WSL2/Ubuntu — KB-7.1; tránh churn CRLF khi file đi qua Windows.)
 * text=auto eol=lf
 
 # Binary — không normalize

@@ -15,15 +15,15 @@
 - Ưu tiên **học đúng + dùng được cho bản thân**, không ship nhanh.
 - Người thực hiện: **bạn + AI**. Không chia role Lead/DevOps/QA — cả hai cùng làm design → code → test.
 
-Ba repo (2 repo app trên GitLab + 1 repo root chỉ track tài liệu/AI assets):
+**Một repo duy nhất** trên GitHub (`anchu3003/knowledge-base`) — BE, FE và tài liệu chung một lịch sử:
 
-| Thư mục | Vai trò | Stack | Remote |
-|---|---|---|---|
-| `Knowledge-base/` | Backend RAG API | Python 3.13 · FastAPI · LangChain · ChromaDB · sentence-transformers | `knowledge-base-be` |
-| `Knowledge-base-fe/` | Frontend UI | Next.js 16 · React 19 · Tailwind v4 · Radix/shadcn | `knowlege-base-fe` |
-| `./` (root) | Tài liệu + AI assets + tools | Markdown, Python tool nhỏ | local `main` (chưa có remote) |
+| Thư mục | Vai trò | Stack |
+|---|---|---|
+| `Knowledge-base/` | Backend RAG API | Python 3.13 · FastAPI · LangChain · ChromaDB · sentence-transformers |
+| `Knowledge-base-fe/` | Frontend UI | Next.js 16 · React 19 · Tailwind v4 · Radix/shadcn |
+| `./` (gốc) | Tài liệu + AI assets + tools | Markdown, Python tool nhỏ |
 
-Root repo **ignore** 2 folder repo con (`.gitignore`) ⇒ không file nào bị track 2 lần.
+Gốc repo có **1** `.gitignore` + **1** `.gitattributes`; `Interview/` (kho tài liệu cá nhân) **luôn bị ignore**.
 
 
 Tài liệu nguồn (source of truth):
@@ -92,9 +92,10 @@ Tài liệu nguồn (source of truth):
 5. **Verify** — chạy test / uvicorn / curl / `npm run build` thật. **Dán kết quả thật**, không nói suông.
 6. **Document** — update `Backlog.md` (status + Kết quả verify + Learning note); update
    `architecture.md` nếu design đổi; ghi tech debt §7 nếu có.
-7. **Close + Git** — commit → push → MR → merge (squash) nếu đủ điều kiện (**CI có sẵn nhưng TẮT** (`CI_ENABLED`) ⇒ chưa có bước chờ pipeline).
+7. **Close + Git** — commit → push → PR → merge (squash) nếu đủ điều kiện (CI GitHub Actions chạy
+   pytest + vitest/typecheck/lint; đỏ thì **không** merge).
    Vòng đời này nằm trong `/run-ticket.md` (đã gộp `close-ticket`).
-8. **Report** — summary ngắn: đã làm gì, file nào, lệnh verify, link MR, phần chưa làm / tech debt.
+8. **Report** — summary ngắn: đã làm gì, file nào, lệnh verify, link PR, phần chưa làm / tech debt.
 
 ---
 
@@ -132,7 +133,7 @@ Tài liệu nguồn (source of truth):
 ### Môi trường dev — WSL2 (Ubuntu) — KB-7.1
 
 Mọi thứ dev chạy trong **WSL2 Ubuntu**; Windows chỉ giữ **VS Code (+ Remote-WSL)** và tool phụ (không bắt buộc).
-Code **phải** nằm trên Linux FS (`~/projects/kb-khoa-hoc`), **không** dùng `/mnt/c|/mnt/d` (chậm với
+Code **phải** nằm trên Linux FS (`~/mygit/personal-side-projects/knowledge-base`), **không** dùng `/mnt/c|/mnt/d` (chậm với
 `node_modules`/`torch`).
 
 | Thành phần | Cài trong WSL | Version hiện tại |
@@ -140,22 +141,22 @@ Code **phải** nằm trên Linux FS (`~/projects/kb-khoa-hoc`), **không** dùn
 | Python | `uv python install 3.13` → `uv venv --python 3.13 .venv` | 3.13.18 |
 | Node | `fnm install --lts` (fnm ở `~/.local/share/fnm`) | 26.13.0 · npm 11.20 |
 | Docker | engine dùng cho `docker build` (xem TD-9 về nơi chạy engine) | 29.9.2 |
-| GitLab CLI | `glab auth login --hostname gitlab.com --token <PAT>` (PAT scope `api`) | 1.128.0 |
-| SSH GitLab | `~/.ssh/id_ed25519` — public key đã add vào GitLab | — |
+| GitHub CLI | `gh auth login` (scope `repo`, `workflow`) | 2.x |
+| SSH GitHub | `~/.ssh/id_ed25519` — public key đã add vào GitHub | — |
 
 Lệnh nhanh:
 
 ```bash
 # BE — test
-cd ~/projects/kb-khoa-hoc/Knowledge-base && .venv/bin/python -m pytest -q   # 19 passed
+cd ~/mygit/personal-side-projects/knowledge-base/Knowledge-base && .venv/bin/python -m pytest -q   # 19 passed
 # FE — build
-cd ~/projects/kb-khoa-hoc/Knowledge-base-fe && npm ci && npm run build
+cd ~/mygit/personal-side-projects/knowledge-base/Knowledge-base-fe && npm ci && npm run build
 # Docker
 docker build -t kb-be:local .          # trong Knowledge-base/
 ```
 
-- **EOL**: mỗi repo có `.gitattributes` (`* text=auto eol=lf`) + `core.autocrlf=input` toàn cục → tránh
-  churn CRLF khi file đi qua Windows (nguyên nhân 2 repo "dirty toàn bộ" ngay sau khi copy sang WSL).
+- **EOL**: repo có **1** `.gitattributes` gốc (`* text=auto eol=lf`) + `core.autocrlf=input` toàn cục → tránh
+  churn CRLF khi file đi qua Windows (nguyên nhân cả repo "dirty toàn bộ" ngay sau khi copy sang WSL).
 - Ưu tiên tool **user-space** (`uv`, `fnm`) → không cần `sudo apt` cho Python/Node.
 
 ### Backend (`Knowledge-base/`)
@@ -185,9 +186,9 @@ docker build -t kb-be:local .          # trong Knowledge-base/
 
 - **Commit**: Conventional Commits — `feat|fix|docs|refactor|test|chore(scope): mô tả`, nhắc ticket ID.
 - **Branch**: `<type>/<ticket-id>-slug` — vd `feat/kb-1.1-pii-redaction`.
-- **GitHub Flow**: `main` luôn chạy được; nhánh ngắn hạn + **MR**; **commit + đóng ticket sau mỗi ticket**.
-- **CI có sẵn nhưng TẮT mặc định** (KB-5.7): 2 repo có `.gitlab-ci.yml` với gate `CI_ENABLED` (chưa đặt biến ⇒ **không** tạo pipeline) ⇒ điều kiện merge vẫn là ticket Done + MR có summary + không conflict. Khi bật `CI_ENABLED=true` → thêm điều kiện **pipeline xanh** vào `/run-ticket.md`.
-- Chi tiết + cách tạo/merge MR: `.clinerules/10-git-workflow.md` và `/run-ticket.md`.
+- **GitHub Flow**: `main` luôn chạy được; nhánh ngắn hạn → **PR** → squash merge; **commit + đóng ticket sau mỗi ticket**.
+- **CI**: GitHub Actions ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)) chạy pytest (BE) + vitest/typecheck/lint (FE) cho mọi push/PR vào `main`; PR đỏ ⇒ **không** merge.
+- Chi tiết + cách tạo/merge PR: `.clinerules/10-git-workflow.md` và `/run-ticket.md`.
 
 ---
 
@@ -256,7 +257,7 @@ Bộ công cụ giúp Cline làm việc nhất quán, tiết kiệm token. **Fil
 | Skill | `.cline/skills/kb-verify` | Verify bằng lệnh thật + dán output |
 | Skill | `.cline/skills/kb-adr` | Cách viết ADR |
 | Skill | `.cline/skills/kb-pii-redaction` | Triển khai/verify redaction PII |
-| Workflow | `.clinerules/workflows/run-ticket.md` | `/run-ticket.md` — thực thi **+ đóng** 1 ticket (gồm git: commit→push→MR→merge) |
+| Workflow | `.clinerules/workflows/run-ticket.md` | `/run-ticket.md` — thực thi **+ đóng** 1 ticket (gồm git: commit→push→PR→merge) |
 | Workflow | `.clinerules/workflows/new-ticket.md` | `/new-ticket.md` — breakdown epic + **Q&A planning** |
 | Tool | `tools/pii_scan.py` | Quét PII/secret trong file |
 | Tool | `tools/verify.sh` | Gom lệnh verify BE + FE |
