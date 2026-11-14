@@ -1,0 +1,46 @@
+# KB-5.7 — CI backend: pytest (không gọi LLM thật; provider là fake/mock trong test).
+#
+# ⚠️ CỜ TẮT MẶC ĐỊNH: pipeline **không được tạo** cho tới khi bật biến CI/CD `CI_ENABLED=true`
+# (Settings → CI/CD → Variables). Chưa bật ⇒ mọi MR/push đều **không** tạo pipeline, hành vi như trước KB-5.7.
+# Bật bằng: thêm biến `CI_ENABLED=true` (không cần Protected/Masked).
+workflow:
+  rules:
+    - if: '$CI_ENABLED == "true"'
+    - when: never
+
+stages:
+  - test
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # KB-5.10: torch bản **CPU** — bản mặc định của PyPI kéo ~3 GB `nvidia-*` (không dùng, chạy CPU).
+  TORCH_CPU_INDEX: "https://download.pytorch.org/whl/cpu"
+
+default:
+  image: python:3.13-slim
+  interruptible: true
+  cache:
+    key:
+      files:
+        - requirements.txt
+    paths:
+      - .cache/pip
+
+pytest:
+  stage: test
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends build-essential libgomp1
+    - python -m pip install --upgrade pip
+    # torch CPU trước để `-r requirements.txt` không kéo bản CUDA (xem KB-5.10)
+    - python -m pip install --no-cache-dir torch --index-url "$TORCH_CPU_INDEX"
+    - python -m pip install --no-cache-dir -r requirements.txt
+  script:
+    - python -m pytest -q --junitxml=report.xml
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - report.xml
+    reports:
+      junit: report.xml

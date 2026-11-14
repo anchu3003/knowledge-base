@@ -1,0 +1,23 @@
+# Build context hygiene — KB-7.1
+# Quan trọng: KHÔNG đưa .env (secret) vào image; bỏ artifact local.
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.gitattributes
+.venv
+__pycache__/
+*.pyc
+.pytest_cache/
+chroma_db/
+documents/
+.idea/
+Interview/
+tests/
+Dockerfile
+docker-compose.yml
+README.md
+Todo.txt
+requirements-dev.txt
+pytest.ini

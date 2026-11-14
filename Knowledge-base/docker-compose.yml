@@ -1,0 +1,64 @@
+services:
+  chatbot-api:
+    build: .
+    container_name: chatbot-api
+    env_file: .env
+    # KB-4.7: image chạy uid 10001 (appuser) nhưng `./chroma_db` là bind mount của user trên host ⇒
+    # ChromaDB không ghi được ("attempt to write a readonly database"). Chạy container bằng UID/GID host;
+    # HOME trỏ vào /tmp vì uid 1000 không có home trong image.
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    environment:
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp/.cache
+      # Model HF nằm ở volume (không bake vào image — image sẽ ~4GB); volume giữ qua các lần recreate.
+      HF_HOME: /hf-cache
+      # CORS: origin của FE (compose chạy FE ở 3010 để không trùng port project khác).
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3010,http://127.0.0.1:3010,http://localhost:3000}
+    ports:
+      # Host 8010 → container 8000: dời port để không trùng project khác (shoplab đang dùng 8080-8088)
+      - "8010:8000"
+    volumes:
+      #mount source code to docker auto refresh
+#      - .:/app
+      - ./chroma_db:/app/chroma_db
+      # KB-4.10: tài liệu gốc — read-only. Trước đây `.dockerignore` loại `Interview/` nên container KHÔNG thấy
+      # folder ⇒ Refresh index sẽ clear 601 chunk rồi index 0 file (mất index). Mount ro: sửa/thêm file trên host
+      # là container thấy ngay, không cần build lại.
+      - ./Interview:/app/Interview:ro
+      # KB-5.2: lịch sử hội thoại (SQLite) phải sống qua restart/recreate ⇒ bind mount thư mục `./data`.
+      # `CHAT_DB_PATH` mặc định `./data/chat.db` (trong WORKDIR /app ⇒ `/app/data/chat.db`).
+      - ./data:/app/data
+      - hf-cache:/hf-cache
+    restart: unless-stopped
+    # healthcheck đã khai báo trong Dockerfile của BE (GET /health); ở compose nới `start_period` vì lần
+    # đầu volume HF còn trống ⇒ phải tải model (Qwen3-Embedding + bge-reranker ~3.3GB) trước khi app ready.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 600s
+
+  chatbot-ui:
+    # KB-4.7: KHÔNG mount source nữa — image phải là đúng thứ sẽ deploy.
+    build:
+      context: ../Knowledge-base-fe
+      args:
+        # Browser gọi BE trực tiếp trên máy host (Q&A KB-4.7 Q1) — `NEXT_PUBLIC_*` nhúng lúc BUILD.
+        # Port host của BE là 8010 (xem `ports` ở service chatbot-api).
+        NEXT_PUBLIC_API_PROXY_URL: ${NEXT_PUBLIC_API_PROXY_URL:-http://localhost:8010}
+        NEXT_PUBLIC_STREAMING: ${NEXT_PUBLIC_STREAMING:-true}
+    container_name: chatbot-ui
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      # Host 3010 → container 3000: dời port để không trùng project khác
+      - "3010:3000"
+    depends_on:
+      chatbot-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  # Model embedding/reranker dùng chung giữa các lần `up` (tránh tải lại 3.3GB).
+  hf-cache:
