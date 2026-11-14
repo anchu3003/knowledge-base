@@ -1,5 +1,8 @@
 # Knowledge Base — RAG chatbot cho tài liệu cá nhân
 
+[![tests](https://github.com/anchu3003/knowledge-base/actions/workflows/tests.yml/badge.svg)](https://github.com/anchu3003/knowledge-base/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 > **Public showcase repo.** Đây là bản gộp **read-only** của 3 repo GitLab (`knowledge-base-be`,
 > `knowlege-base-fe`, `knowledge-base-root`) để có một link duy nhất cho portfolio. Code được phát
 > triển trên GitLab; bản này đồng bộ bằng [`sync.sh`](sync.sh) và **không nhận pull request**.
