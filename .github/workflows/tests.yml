@@ -15,6 +15,11 @@ jobs:
   backend:
     name: backend (pytest)
     runs-on: ubuntu-latest
+    # `Settings` bắt buộc 2 biến này (xem app/core/config.py); test dùng fake
+    # provider nên chỉ cần giá trị dummy, không gọi mạng, không cần key thật.
+    env:
+      OPENAI_API_KEY: gsk_fake_key_for_tests
+      OPENAI_BASE_URL: https://example.invalid/v1
     defaults:
       run:
         working-directory: Knowledge-base
@@ -36,6 +41,13 @@ jobs:
           pip install --index-url https://download.pytorch.org/whl/cpu torch
           pip install -r requirements-dev.txt
           pip install -r requirements.txt
+
+      - name: Create a placeholder corpus
+        # Hai test của /documents/refresh yêu cầu DOCUMENTS_FOLDER tồn tại và có
+        # ít nhất 1 file hỗ trợ. Kho tài liệu thật không nằm trong repo này.
+        run: |
+          mkdir -p Interview
+          printf '# placeholder corpus for CI\n' > Interview/placeholder.md
 
       - name: pytest
         # `python -m pytest` (không phải `pytest`) để CWD nằm trên sys.path,
