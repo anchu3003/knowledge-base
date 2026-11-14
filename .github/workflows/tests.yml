@@ -2,7 +2,7 @@ name: tests
 
 # CI duy nhất của monorepo: backend (pytest) + frontend (vitest/typecheck/lint).
 # Test BE dùng fake provider (xem Knowledge-base/tests/conftest.py) nên KHÔNG cần
-# API key và không gọi mạng.
+# API key, không gọi mạng, và KHÔNG cần folder `Interview/` thật (test dùng `tmp_path`).
 on:
   push:
     branches: [main]
@@ -42,13 +42,6 @@ jobs:
           pip install --index-url https://download.pytorch.org/whl/cpu torch
           pip install -r requirements-dev.txt
           pip install -r requirements.txt
-
-      - name: Create a placeholder corpus
-        # Hai test của /documents/refresh yêu cầu DOCUMENTS_FOLDER tồn tại và có
-        # ít nhất 1 file hỗ trợ. Kho tài liệu thật không nằm trong repo này.
-        run: |
-          mkdir -p Interview
-          printf '# placeholder corpus for CI\n' > Interview/placeholder.md
 
       - name: pytest
         # `python -m pytest` (không phải `pytest`) để CWD nằm trên sys.path,

@@ -2,9 +2,12 @@
 
 Mọi assertion đều kiểm thêm "không lộ chi tiết nội bộ" — đây chính là thứ TD-4 để lọt trước đây.
 """
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
+import app.main as main_module
 from app.core.errors import (
     ProviderAuthError,
     ProviderRateLimitError,
@@ -115,7 +118,19 @@ def test_wrong_method_returns_405_envelope(api_client):
     "method,path",
     [("get", "/documents/status"), ("post", "/documents/refresh"), ("delete", "/documents/clear")],
 )
-def test_documents_errors_map_to_document_store_error(api_client, fake_document_service, method, path):
+def test_documents_errors_map_to_document_store_error(
+        api_client, fake_document_service, method, path, monkeypatch, tmp_path
+):
+    # `/documents/refresh` chạy guard KB-4.10 trước khi gọi service ⇒ patch settings bằng `tmp_path`
+    # để test không phụ thuộc folder `Interview/` thật (2 path còn lại không dùng settings, patch vô hại).
+    (tmp_path / "doc.md").write_text("# tài liệu thật")
+    monkeypatch.setattr(
+        main_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            documents_folder=str(tmp_path), supported_extensions=[".md", ".txt"]
+        ),
+    )
     fake_document_service.error = RuntimeError(f"chroma failed /home/anchu/chroma_db {PROVIDER_URL}")
 
     response = getattr(api_client, method)(path)

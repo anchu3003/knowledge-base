@@ -3,8 +3,11 @@
 Dùng fixture ở `tests/conftest.py`: fake service qua `dependency_overrides`, không chạy lifespan,
 không load model/Chroma/network.
 """
+from types import SimpleNamespace
+
 import pytest
 
+import app.main as main_module
 from app.main import app, get_health_service
 
 
@@ -95,7 +98,20 @@ def test_documents_status_ok(api_client, fake_document_service):
     assert fake_document_service.calls == ["get_status"]
 
 
-def test_documents_refresh_uses_fake_service(api_client, fake_document_service):
+def test_documents_refresh_uses_fake_service(
+        api_client, fake_document_service, monkeypatch, tmp_path
+):
+    # Guard KB-4.10 đọc settings qua `get_settings()` (không phải dependency) ⇒ patch tường minh.
+    # Dùng `tmp_path` thay vì folder `Interview/` thật để test không phụ thuộc máy/CI có tài liệu hay không.
+    (tmp_path / "doc.md").write_text("# tài liệu thật")
+    monkeypatch.setattr(
+        main_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            documents_folder=str(tmp_path), supported_extensions=[".md", ".txt"]
+        ),
+    )
+
     response = api_client.post("/documents/refresh")
 
     assert response.status_code == 200
