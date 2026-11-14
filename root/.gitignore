@@ -1,0 +1,40 @@
+# ==========================================
+# 2 repo con là git repo RIÊNG (GitLab) — root KHÔNG track chúng.
+# Mọi thay đổi code/doc của BE/FE commit ở repo tương ứng.
+# ==========================================
+Knowledge-base/
+Knowledge-base-fe/
+
+# ==========================================
+# Phòng khi 2 folder trên chưa được ignore (vd clone lại) — chặn mọi đường dẫn lồng
+# ==========================================
+**/.venv/
+**/node_modules/
+**/.next/
+**/test-results/
+**/__pycache__/
+**/*.pyc
+**/chroma_db/
+**/data/*.db
+**/data/*.db-*
+
+# ==========================================
+# Secret / cấu hình máy (rule 30-pii-safety: .env KHÔNG bao giờ commit)
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ==========================================
+# OS / editor / log
+# ==========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*.swp
+.idea/
+.vscode/
