@@ -1,0 +1,21 @@
+# Mỗi thư mục con (Knowledge-base/, Knowledge-base-fe/, root/) đã có .gitignore
+# riêng của repo gốc — file này chỉ dọn rác ở tầng monorepo.
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.idea/
+.vscode/
+
+# Log
+*.log
+
+# Không bao giờ commit secret (rule 30-pii-safety của project)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
